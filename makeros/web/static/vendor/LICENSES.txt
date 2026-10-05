@@ -2,5 +2,6 @@ Vendored third-party assets (served from this directory, no CDN).
 
 htmx.min.js — htmx 2.x, BSD 0-Clause license — https://htmx.org
 feather-sprite.svg — Feather Icons 4.29.2, MIT license — https://feathericons.com
+sortable.min.js — Sortable.js 1.15.6, MIT license — https://sortablejs.github.io/Sortable/
 schibsted-grotesk.woff2 — Schibsted Grotesk (variable, latin subset),
   SIL Open Font License 1.1 — https://fonts.google.com/specimen/Schibsted+Grotesk

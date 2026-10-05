@@ -7,8 +7,12 @@
     <h1>{{ collection_label }}</h1>
     <div class="header-actions">
       <nav class="view-toggle" aria-label="Vista">
-        <a class="view-option{% if vista != 'tarjetas' %} active{% endif %}"
+        <a class="view-option{% if vista != 'tarjetas' and vista != 'kanban' %} active{% endif %}"
            href="/{{ collection_slug }}?vista=lista{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Lista</a>
+        {% if collection_slug == "tasks" %}
+        <a class="view-option{% if vista == 'kanban' %} active{% endif %}"
+           href="/{{ collection_slug }}?vista=kanban{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Kanban</a>
+        {% endif %}
         <a class="view-option{% if vista == 'tarjetas' %} active{% endif %}"
            href="/{{ collection_slug }}?vista=tarjetas{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Tarjetas</a>
       </nav>
@@ -36,7 +40,66 @@
   {% endif %}
 </header>
 
-{% if vista == "tarjetas" %}
+{% if collection_slug == "tasks" and vista != "tarjetas" %}
+{% for group in task_groups %}
+<section class="project-group">
+  <h2 class="project-group-title">
+    {% if group["slug"] %}
+    <a href="/projects/{{ group["slug"] }}/project">{{ group["title"] }}</a>
+    {% else %}
+    <span class="muted-title">{{ group["title"] }}</span>
+    {% endif %}
+    <span class="count-pill">{{ group["items"] | length }}</span>
+  </h2>
+  {% if vista == "kanban" %}
+  <div class="kanban" data-group="{{ group["slug"] }}">
+    {% for status, label in task_status_labels.items() %}
+    <div class="kanban-col">
+      <h3>{{ label }}
+        <span class="count-pill">
+          {{ group["items"] | selectattr("status", "equalto", status) | list | length }}
+        </span>
+      </h3>
+      <div class="kanban-cards" data-status="{{ status }}">
+        {% for item in group["items"] if item["status"] == status %}
+        <div class="kanban-card" data-path="{{ item["path"] }}">
+          <a class="kanban-title" href="/{{ item["path"] }}">{{ item["title"] or item["path"] }}</a>
+          <div class="kanban-meta">
+            {% if item["dates"] %}
+            <span class="kanban-due{% if item["vencido"] %} vencido{% endif %}">
+              {{ icon("calendar") }}{{ item["dates"] }}</span>
+            {% endif %}
+            {% if item["assignee"] %}<span>{{ icon("user") }}{{ item["assignee"] }}</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <ul class="item-list">
+    {% for item in group["items"] %}
+    <li class="item-row">
+      <span class="row-icon">{{ icon(item["icon"]) }}</span>
+      <a class="item-title" href="/{{ item["path"] }}">{{ item["title"] or item["path"] }}</a>
+      {% if item["status"] in status_labels %}
+      <span class="badge st-{{ item["status"] }}">{{ status_labels[item["status"]] }}</span>
+      {% endif %}
+      {% if item["dates"] %}
+      <span class="item-meta dates{% if item["vencido"] %} vencido{% endif %}">{{ item["dates"] }}</span>
+      {% endif %}
+      {% if item["assignee"] %}<span class="item-meta">{{ icon("user") }}{{ item["assignee"] }}</span>{% endif %}
+      <span class="item-meta">actualizado {{ item["indexed_at"] }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% else %}
+<p class="item-empty">Todavía no hay tareas. Crea la primera con «+ Añadir».</p>
+{% endfor %}
+{% elif vista == "tarjetas" %}
 <div class="card-size">
   <label for="card-size">Tamaño de tarjetas</label>
   <input type="range" id="card-size" class="card-size-input" min="1" max="4" step="1" value="2"

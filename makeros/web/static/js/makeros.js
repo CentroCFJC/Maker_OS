@@ -103,7 +103,7 @@ document.addEventListener("click", function (event) {
   });
 });
 
-// Restore the saved card density step on load.
+// Restore the saved card density step on load, then wire kanban drag.
 document.addEventListener("DOMContentLoaded", function () {
   var step = 2;
   try {
@@ -112,4 +112,27 @@ document.addEventListener("DOMContentLoaded", function () {
     step = 2;
   }
   makerosCardSize(step);
+
+  if (typeof Sortable === "undefined" || !document.querySelector(".kanban")) {
+    return;
+  }
+  document.querySelectorAll(".kanban").forEach(function (board) {
+    board.querySelectorAll(".kanban-cards").forEach(function (column) {
+      Sortable.create(column, {
+        group: "kanban-" + board.dataset.group,
+        animation: 150,
+        onEnd: function (event) {
+          var path = event.item.dataset.path;
+          var status = event.to.dataset.status;
+          fetch("/" + path + "/estado", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "estado=" + encodeURIComponent(status),
+          }).catch(function () {
+            location.reload();  // restore the true state on failure
+          });
+        },
+      });
+    });
+  });
 });

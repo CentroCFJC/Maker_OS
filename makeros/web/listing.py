@@ -81,6 +81,7 @@ def collection_items(
             "dates": date_span(meta),
             "status": str(meta.get("status") or ""),
             "project": str(meta.get("project") or ""),
+            "assignee": str(meta.get("assignee") or ""),
             "banner": str(meta.get("banner") or ""),
             "extract": extract(row["body"] or ""),
             "vencido": bool(due and to_day(due) < date.today()),

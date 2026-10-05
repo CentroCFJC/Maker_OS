@@ -724,6 +724,7 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
   .card-size input[type="range"] { width: 150px; }
   /* No hover on touch: keep the block menu reachable. */
   .block-menu { opacity: 1; }
+  .kanban { grid-template-columns: 1fr; }
 }
 
 /* ---------- Template editor ---------- */
@@ -745,3 +746,38 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
   padding: 12px 14px; display: flex; flex-direction: column; gap: 12px;
 }
 .banner-create legend { font-size: 14px; color: var(--muted); padding: 0 4px; }
+
+/* ---------- Tasks: project groups + kanban ---------- */
+.project-group { margin-bottom: 30px; }
+.project-group-title {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 19px; margin: 0 0 10px; color: var(--text-title);
+  font-family: var(--font-display);
+}
+.project-group-title a:hover { color: var(--accent); background: transparent; }
+.muted-title { color: var(--muted); }
+.project-group .item-list { margin-bottom: 4px; }
+
+.kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.kanban-col {
+  background: var(--sidebar-bg); border-radius: 8px;
+  padding: 8px; min-height: 90px;
+}
+.kanban-col h3 {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin: 2px 4px 8px;
+}
+.kanban-cards { display: flex; flex-direction: column; gap: 6px; min-height: 40px; }
+.kanban-card {
+  background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px 10px; cursor: grab;
+}
+.kanban-card:hover { border-color: var(--accent); }
+.kanban-card.sortable-ghost, .kanban-card.sortable-chosen { opacity: 0.45; border-style: dashed; }
+.kanban-title { font-weight: 500; font-size: 14px; }
+.kanban-title:hover { color: var(--accent); background: transparent; }
+.kanban-meta { display: flex; align-items: center; gap: 12px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.kanban-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.kanban-due.vencido { color: var(--danger); font-weight: 600; }

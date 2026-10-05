@@ -108,9 +108,19 @@ Phases delivered:
   Filter chips (estado) have Spanish tooltips (`STATUS_HELP` in
   collections.py) explaining each status.
 
-Verification state: **88 pytest tests passing, ruff clean**; new flows
-smoke-tested over HTTP (block menu ops, template editor round-trip +
-seeding, card progress/extract, tooltips).
+- **Task kanban + project grouping** — done (Phase 1 core started).
+  `/tasks` has three views: Lista, Kanban, Tarjetas. Lista and Kanban
+  group tasks under their project (section title links to the project
+  page; unassigned tasks under "Sin proyecto"). Kanban: 4 columns
+  (Pendiente/En proceso/Bloqueada/Terminada), drag & drop via vendored
+  Sortable.js → `POST /{coll}/{page}/estado` writes `status` back to
+  frontmatter. Status chips still filter; `vista=kanban` on non-task
+  collections falls back to lista. Fixed breadcrumb bug: page_new.html
+  linked `collection_label` ("Proyectos" → 404) instead of the slug.
+
+Verification state: **99 pytest tests passing, ruff clean**; new flows
+smoke-tested over HTTP (kanban markup, drag-drop status write, sortable
+serving, breadcrumb fix).
 
 Git: commits on `main` per feature. No remote configured yet.
 
@@ -155,7 +165,7 @@ cd /home/jacob/Downloads/Dev/MakerOS
 make setup                    # venv + editable install with dev deps
 make user u=jacob r=admin     # prompts password (getpass)
 make run                      # http://localhost:8000
-make test                     # pytest (94 tests)
+make test                     # pytest (99 tests)
 make lint                     # ruff
 # Docker: cp .env.example .env (set MAKEROS_SECRET_KEY) && make docker-up
 ```

@@ -19,7 +19,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from ... import frontmatter
-from ...collections import COLLECTIONS, STATUS_FILTERS
+from ...collections import COLLECTIONS, STATUS_FILTERS, STATUS_LABELS
 from ...frontmatter import FrontmatterError
 from ...indexer import index_file, remove_document
 from ...ui import set_ui
@@ -44,7 +44,7 @@ from ..templates import templates
 router = APIRouter()
 
 EDIT_ROLES = ("admin", "member")
-VIEWS = ("lista", "tarjetas")
+VIEWS = ("lista", "tarjetas", "kanban")
 
 # Page banners: uploaded files land in content/_uploads/ and are served
 # back through /media/. Banners may also be plain remote URLs.
@@ -261,6 +261,9 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
         vista = remember = None
     if vista is None:
         vista = request.cookies.get("vista", "lista")
+    # Kanban only exists for tasks; everywhere else it falls back to lista.
+    if vista == "kanban" and collection != "tasks":
+        vista = "lista"
     items = collection_items(
         conn, collection, task_stats=project_task_stats(conn) if collection == "projects" else None
     )
@@ -270,6 +273,10 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
         estado = "todos"
     if estado != "todos":
         items = [item for item in items if item["status"] == estado]
+    # Tasks are grouped by their project (kanban or list per project).
+    task_groups = None
+    if collection == "tasks":
+        task_groups = _group_by_project(conn, items)
     response = templates.TemplateResponse(
         request,
         "list.html",
@@ -283,11 +290,34 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
             vista=vista,
             estado=estado,
             status_filters=STATUS_FILTERS.get(collection),
+            task_groups=task_groups,
         ),
     )
     if remember is not None:
         response.set_cookie("vista", remember)
     return response
+
+
+def _group_by_project(conn, items: list[dict]) -> list[dict]:
+    """Group task items under their project; unassigned tasks go last."""
+    titles: dict[str, str] = {}
+    for project in collection_items(conn, "projects"):
+        slug = project["path"].split("/")[1] if "/" in project["path"] else project["path"]
+        titles[slug] = project["title"] or slug
+    grouped: dict[str, list[dict]] = {}
+    for item in items:
+        grouped.setdefault(item["project"], []).append(item)
+    ordered = sorted((s for s in grouped if s), key=lambda s: titles.get(s, s).lower())
+    if "" in grouped:
+        ordered.append("")
+    return [
+        {
+            "slug": slug,
+            "title": titles.get(slug, slug) if slug else "Sin proyecto",
+            "items": grouped[slug],
+        }
+        for slug in ordered
+    ]
 
 
 @router.get("/{collection}/nuevo")
@@ -623,6 +653,29 @@ async def move_block(
     texts = [b.text for b in blocks]
     texts[block_index], texts[swap_with] = texts[swap_with], texts[block_index]
     _save_blocks(conn, settings, file, meta, texts)
+    return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
+
+
+@router.post("/{collection}/{page_path:path}/estado")
+async def set_status(
+    collection: str,
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    estado: str = Form(...),
+):
+    """Change a page's status (kanban drag & drop writes here)."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    estado = estado.strip()
+    if estado not in STATUS_LABELS:
+        raise HTTPException(status_code=400, detail="Estado desconocido")
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, collection, page_path)
+    meta["status"] = estado
+    frontmatter.write(file, meta, body)
+    index_file(conn, settings.content_dir, file)
     return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
 
 

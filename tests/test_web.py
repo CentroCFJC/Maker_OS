@@ -962,3 +962,90 @@ def test_typed_form_validation(logged_in_client: TestClient):
     assert bad_date.status_code == 400
     no_title = logged_in_client.post("/wiki/nuevo", data={"title": ""})
     assert no_title.status_code == 400
+
+
+# ---------- Task kanban + grouped by project ----------
+
+def _seed_tasks(settings):
+    from makeros.frontmatter import write as fm_write
+
+    fm_write(
+        settings.content_dir / "projects" / "cauce" / "project.md",
+        {"name": "CAUCE", "status": "active"},
+        "Exhibición.",
+    )
+    fm_write(
+        settings.content_dir / "tasks" / "montar.md",
+        {"title": "Montar estructura", "status": "todo", "project": "cauce",
+         "due": "2026-12-01", "assignee": "jacob"},
+        "Pendiente.",
+    )
+    fm_write(
+        settings.content_dir / "tasks" / "cableado.md",
+        {"title": "Cablear sensores", "status": "doing", "project": "cauce"},
+        "En marcha.",
+    )
+    fm_write(
+        settings.content_dir / "tasks" / "sueltos.md",
+        {"title": "Hackaton VR", "status": "todo", "project": ""},
+        "Sin proyecto.",
+    )
+    _reindex(settings)
+
+
+def test_tasks_kanban_grouped_by_project(logged_in_client: TestClient, settings):
+    _seed_tasks(settings)
+    response = logged_in_client.get("/tasks?vista=kanban")
+    assert response.status_code == 200
+    assert "kanban-col" in response.text
+    assert 'data-status="todo"' in response.text
+    assert 'data-status="done"' in response.text
+    # Project section header links to the project page.
+    assert 'href="/projects/cauce/project"' in response.text
+    assert "Montar estructura" in response.text
+    # Unassigned tasks fall under their own group.
+    assert "Sin proyecto" in response.text
+    assert "Hackaton VR" in response.text
+    # Cards carry their path for the drag & drop endpoint.
+    assert 'data-path="tasks/montar"' in response.text
+    # Counts per column.
+    assert "1" in response.text
+
+
+def test_tasks_list_grouped_by_project(logged_in_client: TestClient, settings):
+    _seed_tasks(settings)
+    response = logged_in_client.get("/tasks")
+    assert 'class="project-group"' in response.text
+    assert 'href="/projects/cauce/project"' in response.text
+    assert "Sin proyecto" in response.text
+
+
+def test_kanban_toggle_only_on_tasks(logged_in_client: TestClient):
+    tasks = logged_in_client.get("/tasks")
+    assert ">Kanban</a>" in tasks.text
+    wiki = logged_in_client.get("/wiki")
+    assert ">Kanban</a>" not in wiki.text
+    # Kanban on another collection falls back to the list view.
+    fallback = logged_in_client.get("/wiki?vista=kanban")
+    assert 'class="item-list"' in fallback.text
+
+
+def test_status_change_endpoint(logged_in_client: TestClient, settings):
+    from makeros import frontmatter
+
+    _seed_tasks(settings)
+    response = logged_in_client.post(
+        "/tasks/montar/estado", data={"estado": "done"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    meta, _ = frontmatter.read(settings.content_dir / "tasks" / "montar.md")
+    assert meta["status"] == "done"
+
+    invalid = logged_in_client.post("/tasks/montar/estado", data={"estado": "perdido"})
+    assert invalid.status_code == 400
+
+
+def test_new_page_breadcrumb_links_to_slug(logged_in_client: TestClient):
+    response = logged_in_client.get("/projects/nuevo")
+    assert 'href="/projects"' in response.text
+    assert 'href="/Proyectos"' not in response.text
