@@ -28,19 +28,49 @@
       <input type="search" name="q" placeholder="Buscar…" aria-label="Buscar">
     </form>
 
-    <nav class="sidebar-nav" aria-label="Secciones">
-      <a class="nav-item" href="/">
-        {{ icon("home") }}
-        <span class="nav-label">Inicio</span>
+    {% if user and user["role"] != "viewer" %}
+    <div class="sidebar-section">
+      <p class="sidebar-label">Enlaces rápidos</p>
+      <a class="nav-item" href="/projects/nuevo">
+        {{ icon("plus-square") }}<span class="nav-label">Nuevo proyecto</span>
       </a>
-      {% for slug, c in collections.items() %}
-      <a class="nav-item" href="/{{ slug }}">
-        {{ icon(nav_icons.get(slug)) }}
-        <span class="nav-label">{{ c["label"] }}</span>
-        {% if counts.get(slug, 0) > 0 %}<span class="nav-count">{{ counts[slug] }}</span>{% endif %}
+      <a class="nav-item" href="/tasks/nuevo">
+        {{ icon("plus-circle") }}<span class="nav-label">Nueva tarea</span>
+      </a>
+      <a class="nav-item" href="/research/nuevo">
+        {{ icon("bookmark") }}<span class="nav-label">Nuevo repositorio</span>
+      </a>
+    </div>
+    {% endif %}
+
+    {% if today_events %}
+    <div class="sidebar-section">
+      <p class="sidebar-label">Para hoy</p>
+      {% for ev in today_events %}
+      <a class="nav-item today-event" href="/{{ ev.path }}">
+        {% if ev.time %}<span class="ev-time">{{ ev.time }}</span>{% endif %}
+        <span class="nav-label">{{ ev.title }}</span>
       </a>
       {% endfor %}
-    </nav>
+    </div>
+    {% endif %}
+
+    <div class="sidebar-section nav-section">
+      <p class="sidebar-label">Bases de datos</p>
+      <nav class="sidebar-nav" aria-label="Secciones">
+        <a class="nav-item" href="/">
+          {{ icon("home") }}
+          <span class="nav-label">Inicio</span>
+        </a>
+        {% for slug, c in collections.items() %}
+        <a class="nav-item" href="/{{ slug }}">
+          {{ icon(nav_icons.get(slug)) }}
+          <span class="nav-label">{{ c["label"] }}</span>
+          {% if counts.get(slug, 0) > 0 %}<span class="nav-count">{{ counts[slug] }}</span>{% endif %}
+        </a>
+        {% endfor %}
+      </nav>
+    </div>
 
     {% if user %}
     <div class="sidebar-user">

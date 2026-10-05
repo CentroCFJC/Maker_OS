@@ -1,19 +1,74 @@
 {% extends "base.html" %}
 {% block title %}MakerOS — Inicio{% endblock %}
 {% block content %}
-<header class="page-header">
-  <h1>Buenas, {{ user["display_name"] or user["username"] }}</h1>
-  <p class="page-subtitle">Todo el laboratorio sobre archivos Markdown. Empieza por una colección.</p>
-</header>
 
-<section class="category-grid">
-  {% for slug, c in collections.items() %}
-  <a class="category-card" href="/{{ slug }}">
-    <span class="category-icon">{{ icon(nav_icons.get(slug), cls="icon icon-lg") }}</span>
-    <span class="category-name">{{ c["label"] }}</span>
-    <span class="category-count">{{ counts.get(slug, 0) }} páginas</span>
-  </a>
-  {% endfor %}
+<section class="home-hero">
+  <img src="/static/img/logo.png" alt="" class="hero-logo">
+  <div class="hero-text">
+    <h1>Makerspace</h1>
+    <p class="hero-subtitle">Centro de Ciencia FJC — el sistema operativo del laboratorio. Buenas, {{ user["display_name"] or user["username"] }}.</p>
+  </div>
+  <div class="hero-actions">
+    {% if user and user["role"] != "viewer" %}
+    <a class="btn-hero" href="/projects/nuevo">Nuevo proyecto</a>
+    <a class="btn-hero" href="/tasks/nuevo">Nueva tarea</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="home-section">
+  <div class="home-section-head">
+    <h2>Proyectos</h2>
+    <div class="chip-row" aria-label="Filtro de proyectos">
+      <a class="filter-chip{% if estado == 'todos' %} active{% endif %}"
+         href="/?estado=todos">Todos</a>
+      {% for value, label in project_statuses.items() %}
+      <a class="filter-chip{% if estado == value %} active{% endif %}"
+         href="/?estado={{ value }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% if projects %}
+  <div class="card-grid">
+    {% for item in projects %}
+    <a class="item-card project-card" href="/{{ item["path"] }}">
+      <div class="card-head">
+        <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("layers", cls="icon icon-lg") }}</span>
+        {% if item["status"] in status_labels %}
+        <span class="badge st-{{ item["status"] }}">{{ status_labels[item["status"]] }}</span>
+        {% endif %}
+      </div>
+      <span class="card-title">{{ item["title"] or item["path"] }}</span>
+      {% if item["dates"] %}<span class="card-dates">{{ item["dates"] }}</span>{% endif %}
+      <span class="card-meta">actualizado {{ item["indexed_at"] }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  <p class="home-more"><a href="/projects">Ver todos los proyectos ({{ total_projects }})</a></p>
+  {% else %}
+  <p class="item-empty">
+    {% if estado == "todos" %}Todavía no hay proyectos. Crea el primero.
+    {% else %}No hay proyectos con ese estado.{% endif %}
+  </p>
+  {% endif %}
+</section>
+
+<section class="home-section">
+  <h2>Tareas sin proyecto</h2>
+  <div class="task-groups">
+    {% for status, label in task_status_labels.items() %}
+    <div class="task-group">
+      <h3>{{ label }} <span class="count-pill">{{ task_groups.get(status, []) | length }}</span></h3>
+      <ul class="task-mini-list">
+        {% for task in task_groups.get(status, []) %}
+        <li><a href="/{{ task["path"] }}">{{ task["title"] or task["path"] }}</a></li>
+        {% else %}
+        <li class="item-empty">Ninguna.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
 </section>
 
 <section class="home-section">

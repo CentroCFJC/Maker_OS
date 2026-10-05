@@ -19,3 +19,23 @@ COLLECTIONS: dict[str, dict[str, str]] = {
     "inventory": {"label": "Inventario", "template": "inventory.md", "icon": "package"},
     "exhibits": {"label": "Exhibiciones", "template": "device.md", "icon": "monitor"},
 }
+
+# Frontmatter status vocabularies (see templates/project.md, task.md).
+# Labels are Spanish; the raw values stay ASCII in files and URLs.
+PROJECT_STATUSES = {
+    "idea": "Idea",
+    "planning": "Planificación",
+    "active": "En proceso",
+    "paused": "En pausa",
+    "done": "Completado",
+    "archived": "Archivado",
+}
+TASK_STATUSES = {
+    "todo": "Pendiente",
+    "doing": "En proceso",
+    "blocked": "Bloqueada",
+    "done": "Terminada",
+}
+STATUS_LABELS = {**PROJECT_STATUSES, **TASK_STATUSES}
+# Collections whose index page gets status filter chips.
+STATUS_FILTERS = {"projects": PROJECT_STATUSES, "tasks": TASK_STATUSES}

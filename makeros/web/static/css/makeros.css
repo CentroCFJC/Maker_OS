@@ -75,6 +75,16 @@ a:hover { background: var(--sidebar-hover); border-radius: 3px; }
   }
 }
 
+/* ---------- Sidebar sections ---------- */
+.sidebar-section { padding: 4px 0 8px; }
+.sidebar-label {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em; margin: 6px 10px;
+}
+.sidebar-section.nav-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ev-time { font-weight: 700; color: var(--accent); font-size: 12px; }
+.today-event .nav-label { font-size: 13px; }
+
 /* ---------- Sidebar ---------- */
 .sidebar {
   width: 240px;
@@ -110,7 +120,8 @@ a:hover { background: var(--sidebar-hover); border-radius: 3px; }
 }
 .sidebar-search input:focus { outline: 1.5px solid var(--accent); border-color: transparent; }
 
-.sidebar-nav { flex: 1; overflow-y: auto; }
+.sidebar-nav { overflow-y: auto; }
+.nav-section .sidebar-nav { flex: 1; }
 .nav-item {
   display: flex; align-items: center; gap: 8px;
   padding: 5px 10px;
@@ -143,10 +154,12 @@ a:hover { background: var(--sidebar-hover); border-radius: 3px; }
 /* ---------- Content area ---------- */
 .content {
   flex: 1;
+  width: 100%;
   min-width: 0;
-  padding: 40px 56px 80px;
-  max-width: 900px;
+  padding: 32px clamp(20px, 4vw, 56px) 80px;
 }
+/* Long-form text keeps a readable measure even on very wide screens. */
+.blocks { max-width: 920px; }
 
 .page-header { margin-bottom: 24px; }
 .page-header-row {
@@ -185,6 +198,76 @@ button, .btn-primary, .btn-ghost, .btn-mini, .btn-danger-ghost {
   border: 1px solid var(--border); padding: 4px 10px; font-size: 13px;
 }
 .btn-danger-ghost:hover { background: #fdf0f0; }
+
+/* ---------- Home ---------- */
+.home-hero {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  background: linear-gradient(120deg, #29265b 0%, #232147 55%, #45204d 100%);
+  border-radius: 12px; padding: 26px 30px; margin: 0 0 30px;
+  color: #ffffff;
+}
+.home-hero h1 { margin: 0; font-size: clamp(28px, 5vw, 36px); color: #ffffff; line-height: 1.1; }
+.hero-logo {
+  width: 56px; height: 56px; object-fit: contain;
+  background: #ffffff; border-radius: 12px; padding: 6px;
+}
+.hero-text { flex: 1; min-width: 240px; }
+.hero-subtitle { margin: 4px 0 0; color: #d9d7ec; font-size: 14px; max-width: 62ch; }
+.hero-actions { display: flex; gap: 8px; }
+.btn-hero {
+  border: 1px solid rgba(255, 255, 255, 0.45); color: #ffffff;
+  padding: 6px 14px; border-radius: var(--radius); font-size: 14px; font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+}
+.btn-hero:hover { background: var(--brand-red); border-color: var(--brand-red); color: #ffffff; }
+
+.home-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin: 0 0 10px;
+}
+.home-section-head h2 { margin: 0; }
+.home-more { font-size: 13px; margin: 12px 0 0; }
+.home-more a { color: var(--accent); }
+
+.task-groups {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;
+}
+.task-group h3 {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; margin: 0 0 6px; color: var(--text-title);
+}
+.count-pill {
+  background: var(--ink-soft); color: var(--ink);
+  border-radius: 999px; font-size: 11px; padding: 0 8px; font-weight: 600;
+}
+.task-mini-list { list-style: none; margin: 0; padding: 0; }
+.task-mini-list li {
+  padding: 4px 0; font-size: 14px; border-bottom: 1px solid var(--border);
+}
+.task-mini-list a:hover { color: var(--accent); background: transparent; }
+
+/* ---------- Status badges ---------- */
+.badge {
+  font-size: 11px; font-weight: 600; border-radius: 999px;
+  padding: 1px 9px; white-space: nowrap;
+}
+.st-idea, .st-archived { background: #f0eff4; color: #5b5a57; }
+.st-planning { background: var(--ink-soft); color: var(--ink); }
+.st-active, .st-doing { background: #e7effc; color: #1d4fb8; }
+.st-paused, .st-todo { background: #fdf1de; color: #8a5300; }
+.st-done { background: #e8f3ec; color: #1f7a44; }
+.st-blocked { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- Filter chips ---------- */
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.filter-chip {
+  padding: 3px 12px; border-radius: 999px; border: 1px solid var(--border);
+  font-size: 13px; color: var(--muted); background: #ffffff;
+}
+.filter-chip:hover { background: var(--sidebar-hover); color: var(--text); }
+.filter-chip.active {
+  background: var(--ink); border-color: var(--ink); color: #ffffff; font-weight: 600;
+}
 
 /* ---------- Home ---------- */
 .category-grid {
@@ -322,6 +405,7 @@ button, .btn-primary, .btn-ghost, .btn-mini, .btn-danger-ghost {
   padding: 14px; background: #ffffff;
 }
 .item-card:hover { border-color: var(--accent); background: var(--accent-soft); }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .card-icon { display: flex; }
 .card-icon .icon { color: var(--accent); }
 .card-title { font-weight: 600; font-size: 15px; color: var(--text-title); }
@@ -513,6 +597,9 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
   .cal-day-head { margin-bottom: 2px; }
   .cal-chip { font-size: 11px; padding: 0 4px; }
   .cal-add { opacity: 1; }          /* no hover on touch */
+  .home-hero { padding: 18px; }
+  .hero-actions { width: 100%; }
+  .home-section-head { align-items: flex-start; flex-direction: column; }
   .card-size { flex-wrap: wrap; }
   .card-size input[type="range"] { width: 150px; }
   /* Block controls sit off-canvas on desktop; inline row on mobile. */

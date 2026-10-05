@@ -8,7 +8,6 @@ through the frontmatter module and refresh the index immediately.
 
 from __future__ import annotations
 
-import json
 import re
 import unicodedata
 from datetime import UTC, datetime, timedelta
@@ -18,8 +17,8 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
 from ... import frontmatter
-from ...collections import COLLECTIONS
-from ...indexer import index_file, list_collection, remove_document
+from ...collections import COLLECTIONS, STATUS_FILTERS
+from ...indexer import index_file, remove_document
 from ...ui import set_ui
 from ..blocks import BLOCK_SEEDS, join_blocks, split_blocks
 from ..calendar import (
@@ -34,6 +33,7 @@ from ..calendar import (
 )
 from ..deps import ConnDep, UserDep, base_ctx, get_settings
 from ..icons import is_valid_icon
+from ..listing import collection_items
 from ..render import render_markdown
 from ..templates import templates
 
@@ -116,19 +116,6 @@ def _calendar_response(request: Request, conn, user, info: dict[str, str]):
     )
 
 
-def _date_span(meta: dict) -> str:
-    """Compact 'start → due' label for list rows and cards (projects)."""
-    start = parse_when(meta.get("start"))
-    due = parse_when(meta.get("due"))
-    if start is None and due is None:
-        return ""
-    start_s = start.strftime("%Y-%m-%d") if start else ""
-    due_s = due.strftime("%Y-%m-%d") if due else ""
-    if start_s and due_s:
-        return f"{start_s} → {due_s}"
-    return start_s or due_s
-
-
 @router.post("/ui/icono/{collection}")
 async def set_collection_icon(
     collection: str,
@@ -175,16 +162,13 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
         vista = remember = None
     if vista is None:
         vista = request.cookies.get("vista", "lista")
-    items = [
-        {
-            "path": row["path"],
-            "title": row["title"],
-            "indexed_at": row["indexed_at"],
-            "icon": json.loads(row["meta_json"] or "{}").get("icon"),
-            "dates": _date_span(json.loads(row["meta_json"] or "{}")),
-        }
-        for row in list_collection(conn, collection)
-    ]
+    items = collection_items(conn, collection)
+    # Optional status filter (chips on projects/tasks index pages).
+    estado = request.query_params.get("estado", "todos")
+    if estado not in STATUS_FILTERS.get(collection, {}) and estado != "todos":
+        estado = "todos"
+    if estado != "todos":
+        items = [item for item in items if item["status"] == estado]
     response = templates.TemplateResponse(
         request,
         "list.html",
@@ -196,6 +180,8 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
             collection_label=info["label"],
             items=items,
             vista=vista,
+            estado=estado,
+            status_filters=STATUS_FILTERS.get(collection),
         ),
     )
     if remember is not None:

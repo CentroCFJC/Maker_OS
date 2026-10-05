@@ -9,12 +9,13 @@ from typing import Annotated, Any
 from fastapi import Depends, Request
 
 from ..auth import get_user
-from ..collections import COLLECTIONS
+from ..collections import COLLECTIONS, STATUS_LABELS, TASK_STATUSES
 from ..config import Settings
 from ..db import connect
 from ..indexer import collection_counts
 from ..ui import collection_icons
 from .icons import icon_names
+from .listing import todays_events
 
 
 def get_settings(request: Request) -> Settings:
@@ -57,6 +58,9 @@ def base_ctx(
         "collections": COLLECTIONS,
         "nav_icons": collection_icons(conn),
         "icon_list": icon_names(),
+        "today_events": todays_events(conn),
+        "status_labels": STATUS_LABELS,
+        "task_status_labels": TASK_STATUSES,
     }
     ctx.update(extra)
     return ctx

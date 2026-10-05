@@ -1,5 +1,7 @@
 """Web layer: auth flow, wiki render, search, dashboard."""
 
+from datetime import date
+
 from fastapi.testclient import TestClient
 
 
@@ -503,3 +505,88 @@ def test_card_size_slider_in_grid_view(logged_in_client: TestClient):
 
 def test_vendored_font_served(client: TestClient):
     assert client.get("/static/vendor/schibsted-grotesk.woff2").status_code == 200
+
+
+# ---------- Homepage dashboard + status filters ----------
+
+def _seed_dashboard(settings):
+    from makeros.frontmatter import write as fm_write
+
+    fm_write(
+        settings.content_dir / "projects" / "cauce" / "project.md",
+        {"name": "CAUCE", "status": "active", "start": "2026-06-01",
+         "due": "2026-09-10"},
+        "Exhibición interactiva.",
+    )
+    fm_write(
+        settings.content_dir / "projects" / "inactivo" / "project.md",
+        {"name": "Proyecto dormido", "status": "paused"},
+        "En pausa.",
+    )
+    fm_write(
+        settings.content_dir / "tasks" / "hackaton-vr.md",
+        {"title": "Hackaton VR", "status": "todo", "project": ""},
+        "Idea pendiente.",
+    )
+    fm_write(
+        settings.content_dir / "tasks" / "con-proyecto.md",
+        {"title": "Tarea asignada", "status": "doing", "project": "cauce"},
+        "Pertenece a un proyecto.",
+    )
+    _reindex(settings)
+
+
+def test_home_dashboard_sections(logged_in_client: TestClient, settings):
+    _seed_dashboard(settings)
+    response = logged_in_client.get("/")
+    assert response.status_code == 200
+    assert "Makerspace" in response.text
+    assert "Buenas, Jacob" in response.text
+    assert "Tareas sin proyecto" in response.text
+    assert "Hackaton VR" in response.text            # unassigned task
+    assert '<span class="count-pill">1</span>' in response.text  # one pending
+    assert "Cambios recientes" in response.text
+    # Sidebar sections from the Notion template.
+    assert "Enlaces rápidos" in response.text
+    assert "Bases de datos" in response.text
+    # Active project shows a status badge.
+    assert 'st-active">En proceso' in response.text
+
+
+def test_home_project_filter(logged_in_client: TestClient, settings):
+    _seed_dashboard(settings)
+    active = logged_in_client.get("/?estado=active")
+    assert "CAUCE" in active.text
+    assert "Ver todos los proyectos (1)" in active.text  # only the active one
+
+    paused = logged_in_client.get("/?estado=paused")
+    assert "Proyecto dormido" in paused.text
+    assert "Ver todos los proyectos (1)" in paused.text
+
+
+def test_projects_page_status_chips(logged_in_client: TestClient, settings):
+    _seed_dashboard(settings)
+    response = logged_in_client.get("/projects")
+    assert "filter-chip" in response.text
+    assert "En proceso" in response.text  # chip label
+    assert 'st-active">En proceso' in response.text
+
+    filtered = logged_in_client.get("/projects?estado=paused")
+    assert "Proyecto dormido" in filtered.text
+    assert "CAUCE" not in filtered.text
+
+    # The view toggle keeps the filter.
+    grid = logged_in_client.get("/projects?estado=paused&vista=tarjetas")
+    assert "estado=paused" in grid.text
+
+
+def test_sidebar_para_hoy_shows_todays_events(logged_in_client: TestClient, settings):
+    _write(
+        settings.content_dir / "calendario" / "reunion-hoy.md",
+        {"title": "Reunión de hoy", "start": f"{date.today().isoformat()} 15:00",
+         "end": f"{date.today().isoformat()} 16:00"},
+    )
+    _reindex(settings)
+    response = logged_in_client.get("/")
+    assert "Para hoy" in response.text
+    assert "Reunión de hoy" in response.text

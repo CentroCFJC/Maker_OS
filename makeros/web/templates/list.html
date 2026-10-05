@@ -8,9 +8,9 @@
     <div class="header-actions">
       <nav class="view-toggle" aria-label="Vista">
         <a class="view-option{% if vista != 'tarjetas' %} active{% endif %}"
-           href="/{{ collection_slug }}?vista=lista">Lista</a>
+           href="/{{ collection_slug }}?vista=lista{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Lista</a>
         <a class="view-option{% if vista == 'tarjetas' %} active{% endif %}"
-           href="/{{ collection_slug }}?vista=tarjetas">Tarjetas</a>
+           href="/{{ collection_slug }}?vista=tarjetas{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Tarjetas</a>
       </nav>
       {% include "_section_icon_picker.html" %}
       {% if user and user["role"] != "viewer" %}
@@ -18,6 +18,16 @@
       {% endif %}
     </div>
   </div>
+  {% if status_filters %}
+  <div class="chip-row" aria-label="Filtro por estado">
+    <a class="filter-chip{% if estado == 'todos' %} active{% endif %}"
+       href="/{{ collection_slug }}?estado=todos&vista={{ vista }}">Todos</a>
+    {% for value, label in status_filters.items() %}
+    <a class="filter-chip{% if estado == value %} active{% endif %}"
+       href="/{{ collection_slug }}?estado={{ value }}&vista={{ vista }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
 </header>
 
 {% if vista == "tarjetas" %}
@@ -26,13 +36,15 @@
   <input type="range" id="card-size" class="card-size-input" min="180" max="480" step="20"
          value="220" oninput="makerosCardSize(this.value)">
 </div>
-{% endif %}
-
-{% if vista == "tarjetas" %}
 <div class="card-grid">
   {% for item in items %}
   <a class="item-card" href="/{{ item["path"] }}">
-    <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("file", cls="icon icon-lg") }}</span>
+    <div class="card-head">
+      <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("file", cls="icon icon-lg") }}</span>
+      {% if item["status"] in status_labels %}
+      <span class="badge st-{{ item["status"] }}">{{ status_labels[item["status"]] }}</span>
+      {% endif %}
+    </div>
     <span class="card-title">{{ item["title"] or item["path"] }}</span>
     {% if item["dates"] %}<span class="card-dates">{{ item["dates"] }}</span>{% endif %}
     <span class="card-meta">actualizado {{ item["indexed_at"] }}</span>
@@ -47,6 +59,9 @@
   <li class="item-row">
     <span class="row-icon">{{ icon(item["icon"]) }}</span>
     <a class="item-title" href="/{{ item["path"] }}">{{ item["title"] or item["path"] }}</a>
+    {% if item["status"] in status_labels %}
+    <span class="badge st-{{ item["status"] }}">{{ status_labels[item["status"]] }}</span>
+    {% endif %}
     {% if item["dates"] %}<span class="item-meta dates">{{ item["dates"] }}</span>{% endif %}
     <span class="item-meta">actualizado {{ item["indexed_at"] }}</span>
   </li>

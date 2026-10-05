@@ -54,10 +54,21 @@ Phases delivered:
   mobile, card-size slider (localStorage), skip link, focus-visible,
   prefers-reduced-motion. Project skills in `.agents/skills/`
   (frontend-design, accessibility, fastapi) informed this pass.
+- **Notion-style dashboard** — done, modeled on the team's old Notion
+  page (see `notion-template.png`). Home: indigo hero ("Makerspace"),
+  Proyectos section with status filter chips (`?estado=`) and cards
+  with status badges, "Tareas sin proyecto" grouped by status with
+  counts, Cambios recientes. Sidebar: "Enlaces rápidos", "Para hoy"
+  (today's events from the calendar), "Bases de datos". Status
+  vocabularies and Spanish labels in `makeros/collections.py`
+  (PROJECT_STATUSES/TASK_STATUSES); badge colors are `.st-<value>`
+  classes. Content column is full-width (readability cap only on
+  long-form `.blocks`). Listing helpers shared by dashboard and index
+  pages live in `makeros/web/listing.py`.
 
-Verification state: **69 pytest tests passing, ruff clean**; new flows
-smoke-tested over HTTP (sidebar icons, section icon override, slider,
-font serving).
+Verification state: **73 pytest tests passing, ruff clean**; new flows
+smoke-tested over HTTP (dashboard sections, filter chips, badges,
+sidebar sections).
 
 Git: commits on `main` per feature. No remote configured yet.
 
@@ -102,7 +113,7 @@ cd /home/jacob/Downloads/Dev/MakerOS
 make setup                    # venv + editable install with dev deps
 make user u=jacob r=admin     # prompts password (getpass)
 make run                      # http://localhost:8000
-make test                     # pytest (69 tests)
+make test                     # pytest (73 tests)
 make lint                     # ruff
 # Docker: cp .env.example .env (set MAKEROS_SECRET_KEY) && make docker-up
 ```
