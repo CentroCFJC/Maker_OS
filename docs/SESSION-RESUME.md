@@ -77,6 +77,13 @@ Phases delivered:
   `/{collection}/{page_path:path}`) must stay registered LAST in its
   router — it shadowed the block GET routes (inline edit forms 404'd)
   until it was moved.
+- **Card density steps** — done. The card slider is stepped (1–4), not
+  continuous; text size never changes. Steps set `data-step` on
+  .card-grid (CSS `--card-min` + `.step-2/3/4` visibility rules):
+  1 Compacta (título + estado, 150px), 2 Normal (portada y
+  actualización, 220px, server default), 3 Detallada (fechas y
+  progreso, 330px), 4 Completa (descripción, 460px). Saved per browser
+  in localStorage (`makeros-card-step`).
 - **Block 3-dot menu + templates + rich cards** — done. Blocks hover
   menu (more-vertical): Editar, Duplicar, Mover arriba/abajo,
   Añadir debajo (full type list), Eliminar (routes: `.../duplicar`,
@@ -137,7 +144,7 @@ cd /home/jacob/Downloads/Dev/MakerOS
 make setup                    # venv + editable install with dev deps
 make user u=jacob r=admin     # prompts password (getpass)
 make run                      # http://localhost:8000
-make test                     # pytest (88 tests)
+make test                     # pytest (89 tests)
 make lint                     # ruff
 # Docker: cp .env.example .env (set MAKEROS_SECRET_KEY) && make docker-up
 ```

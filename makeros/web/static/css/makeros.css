@@ -399,6 +399,18 @@ button, .btn-primary, .btn-ghost, .btn-mini, .btn-danger-ghost {
   grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 220px), 1fr));
   gap: 12px;
 }
+/* Card density steps: each step widens the card and reveals more
+   content. Text size never changes. */
+.card-grid[data-step="1"] { --card-min: 150px; }
+.card-grid[data-step="2"] { --card-min: 220px; }
+.card-grid[data-step="3"] { --card-min: 330px; }
+.card-grid[data-step="4"] { --card-min: 460px; }
+.card-grid[data-step="1"] .step-2,
+.card-grid[data-step="1"] .step-3,
+.card-grid[data-step="1"] .step-4,
+.card-grid[data-step="2"] .step-3,
+.card-grid[data-step="2"] .step-4,
+.card-grid[data-step="3"] .step-4 { display: none; }
 .item-card {
   display: flex; flex-direction: column; gap: 6px;
   border: 1px solid var(--border); border-radius: var(--radius);
@@ -669,7 +681,11 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
   display: flex; align-items: center; gap: 10px;
   margin: 0 0 12px; font-size: 13px; color: var(--muted);
 }
-.card-size input[type="range"] { accent-color: var(--accent); width: 180px; }
+.card-size input[type="range"] { accent-color: var(--accent); width: 140px; }
+.card-size-label {
+  font-weight: 600; color: var(--text); font-size: 13px;
+  min-width: 68px; text-transform: capitalize;
+}
 
 /* ---------- Responsive ---------- */
 .nav-toggle {

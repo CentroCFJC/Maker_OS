@@ -836,3 +836,12 @@ def test_status_chips_have_tooltips(logged_in_client: TestClient):
     assert 'title="Solo una idea' in page.text
     home = logged_in_client.get("/")
     assert 'title="Sin filtro' in home.text
+
+
+def test_card_slider_is_stepped(logged_in_client: TestClient):
+    response = logged_in_client.get("/wiki?vista=tarjetas")
+    assert 'min="1" max="4" step="1"' in response.text
+    assert 'data-step="2"' in response.text   # server default: Normal
+    assert "card-size-label" in response.text
+    # Elements are gated by step classes in CSS, not stripped from HTML.
+    assert "step-4" in response.text or "step-2" in response.text

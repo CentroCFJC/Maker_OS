@@ -20,16 +20,29 @@ function makerosToggleSidebar(toggle) {
   }
 }
 
-// Card-grid density slider: changes the column width only. Card text
-// stays at a fixed size; wider cards just reveal more (banner, dates,
-// progress, excerpt).
+// Card density steps: 1 Compacta, 2 Normal, 3 Detallada, 4 Completa.
+// Each step widens the card and reveals more elements (CSS hides
+// .step-2/3/4 classes below the active step). Text size never changes.
+var CARD_STEPS = {
+  1: "Compacta",
+  2: "Normal",
+  3: "Detallada",
+  4: "Completa",
+};
+
 function makerosCardSize(value) {
-  var v = parseInt(value, 10) || 220;
+  var step = Math.min(4, Math.max(1, parseInt(value, 10) || 2));
   document.querySelectorAll(".card-grid").forEach(function (grid) {
-    grid.style.setProperty("--card-min", v + "px");
+    grid.dataset.step = step;
+  });
+  document.querySelectorAll(".card-size-input").forEach(function (slider) {
+    slider.value = step;
+  });
+  document.querySelectorAll("[data-step-label]").forEach(function (label) {
+    label.textContent = CARD_STEPS[step];
   });
   try {
-    localStorage.setItem("makeros-card-min", value);
+    localStorage.setItem("makeros-card-step", step);
   } catch (e) {
     /* private mode: keep it session-only */
   }
@@ -90,18 +103,13 @@ document.addEventListener("click", function (event) {
   });
 });
 
-// Restore the saved card size on load.
+// Restore the saved card density step on load.
 document.addEventListener("DOMContentLoaded", function () {
-  var saved = null;
+  var step = 2;
   try {
-    saved = localStorage.getItem("makeros-card-min");
+    step = localStorage.getItem("makeros-card-step") || 2;
   } catch (e) {
-    saved = null;
+    step = 2;
   }
-  if (saved) {
-    document.querySelectorAll(".card-size-input").forEach(function (slider) {
-      slider.value = saved;
-    });
-    makerosCardSize(saved);
-  }
+  makerosCardSize(step);
 });
