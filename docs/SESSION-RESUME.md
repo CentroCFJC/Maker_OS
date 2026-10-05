@@ -84,6 +84,17 @@ Phases delivered:
   actualización, 220px, server default), 3 Detallada (fechas y
   progreso, 330px), 4 Completa (descripción, 460px). Saved per browser
   in localStorage (`makeros-card-step`).
+- **Typed creation forms** — done. `/nuevo` renders a per-collection
+  form from `makeros/web/forms.py` (`FORM_FIELDS` + `fields_for`);
+  `create_page` reads the raw form dynamically (`await request.form()`)
+  and validates by kind (text/date/datetime/select/url/banner).
+  Projects: nombre, estado, responsable, inicio, vencimiento, portada
+  (upload/URL at creation), descripción. Research: tipo, URL, proyecto.
+  Tasks: proyecto, asignación, vencimiento, prioridad, estado.
+  Inventory: tipo, modelo, serie, ubicación, condición. Events: start/
+  end via datetime-local (day-click prefills T09:00). Exhibits: ip,
+  ssh_user, ubicación, responsable. Empty fields keep the template seed
+  value; events without end keep end=start.
 - **Block 3-dot menu + templates + rich cards** — done. Blocks hover
   menu (more-vertical): Editar, Duplicar, Mover arriba/abajo,
   Añadir debajo (full type list), Eliminar (routes: `.../duplicar`,
@@ -144,7 +155,7 @@ cd /home/jacob/Downloads/Dev/MakerOS
 make setup                    # venv + editable install with dev deps
 make user u=jacob r=admin     # prompts password (getpass)
 make run                      # http://localhost:8000
-make test                     # pytest (89 tests)
+make test                     # pytest (94 tests)
 make lint                     # ruff
 # Docker: cp .env.example .env (set MAKEROS_SECRET_KEY) && make docker-up
 ```

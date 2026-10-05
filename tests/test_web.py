@@ -421,7 +421,7 @@ def test_create_event_rejects_bad_date(logged_in_client: TestClient):
 def test_new_event_form_prefills_date(logged_in_client: TestClient):
     response = logged_in_client.get("/calendario/nuevo?fecha=2026-12-24")
     assert response.status_code == 200
-    assert 'value="2026-12-24"' in response.text
+    assert 'value="2026-12-24T09:00"' in response.text
 
 
 def test_project_dates_show_on_cards_and_list(logged_in_client: TestClient, settings):
@@ -845,3 +845,120 @@ def test_card_slider_is_stepped(logged_in_client: TestClient):
     assert "card-size-label" in response.text
     # Elements are gated by step classes in CSS, not stripped from HTML.
     assert "step-4" in response.text or "step-2" in response.text
+
+
+# ---------- Typed creation forms ----------
+
+def test_project_form_fields_and_creation(logged_in_client: TestClient, settings):
+    form = logged_in_client.get("/projects/nuevo")
+    assert "Nombre del proyecto" in form.text
+    assert "Vencimiento" in form.text
+    assert 'name="banner_file"' in form.text
+    assert "<option value=\"active\">En proceso</option>" in form.text
+
+    response = logged_in_client.post(
+        "/projects/nuevo",
+        data={
+            "title": "Feria del Libro",
+            "status": "active",
+            "lead": "jacob",
+            "start": "2026-10-19",
+            "due": "2026-10-23",
+            "body": "Match literario interactivo.",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from makeros import frontmatter
+
+    meta, body = frontmatter.read(
+        settings.content_dir / "projects" / "feria-del-libro" / "project.md"
+    )
+    assert meta["title"] == "Feria del Libro"
+    assert meta["status"] == "active"
+    assert meta["lead"] == "jacob"
+    assert meta["start"] == "2026-10-19"
+    assert meta["due"] == "2026-10-23"
+    assert "Match literario" in body
+
+
+def test_project_create_with_banner_upload(logged_in_client: TestClient, settings):
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    response = logged_in_client.post(
+        "/projects/nuevo",
+        files={"banner_file": ("portada.png", png, "image/png")},
+        data={"title": "Con Portada", "status": "idea"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from makeros import frontmatter
+
+    meta, _ = frontmatter.read(
+        settings.content_dir / "projects" / "con-portada" / "project.md"
+    )
+    assert meta["banner"].startswith("/media/")
+
+
+def test_research_and_task_forms(logged_in_client: TestClient, settings):
+    form = logged_in_client.get("/research/nuevo")
+    assert "Tipo" in form.text and "URL" in form.text
+
+    response = logged_in_client.post(
+        "/research/nuevo",
+        data={"title": "Klipper docs", "type": "paper",
+              "url": "https://example.com/paper", "body": "Bueno."},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from makeros import frontmatter
+
+    meta, _ = frontmatter.read(settings.content_dir / "research" / "klipper-docs.md")
+    assert meta["type"] == "paper"
+    assert meta["url"] == "https://example.com/paper"
+
+    logged_in_client.post(
+        "/tasks/nuevo",
+        data={"title": "Cambiar fusor", "project": "cauce", "assignee": "jacob",
+              "due": "2026-11-01", "priority": "high"},
+    )
+    meta, _ = frontmatter.read(settings.content_dir / "tasks" / "cambiar-fusor.md")
+    assert meta["project"] == "cauce"
+    assert meta["assignee"] == "jacob"
+    assert meta["due"] == "2026-11-01"
+    assert meta["priority"] == "high"
+
+
+def test_inventory_form_fields_and_creation(logged_in_client: TestClient, settings):
+    form = logged_in_client.get("/inventory/nuevo")
+    assert "Número de serie" in form.text
+    assert "Fuera de servicio" in form.text
+
+    logged_in_client.post(
+        "/inventory/nuevo",
+        data={"title": "Prusa MK4", "type": "impresora-3d", "model": "MK4",
+              "serial": "SN-123", "location": "Sala CAUCE", "condition": "bueno"},
+    )
+    from makeros import frontmatter
+
+    meta, _ = frontmatter.read(settings.content_dir / "inventory" / "prusa-mk4.md")
+    assert meta["model"] == "MK4"
+    assert meta["serial"] == "SN-123"
+    assert meta["location"] == "Sala CAUCE"
+    assert meta["condition"] == "bueno"
+
+
+def test_typed_form_validation(logged_in_client: TestClient):
+    bad_status = logged_in_client.post(
+        "/projects/nuevo", data={"title": "X", "status": "inexistente"}
+    )
+    assert bad_status.status_code == 400
+    bad_url = logged_in_client.post(
+        "/research/nuevo", data={"title": "Y", "url": "ftp://mal.com"}
+    )
+    assert bad_url.status_code == 400
+    bad_date = logged_in_client.post(
+        "/tasks/nuevo", data={"title": "Z", "due": "pronto"}
+    )
+    assert bad_date.status_code == 400
+    no_title = logged_in_client.post("/wiki/nuevo", data={"title": ""})
+    assert no_title.status_code == 400

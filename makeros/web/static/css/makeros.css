@@ -732,3 +732,16 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 14px; line-height: 1.5;
 }
+
+/* ---------- Typed creation forms ---------- */
+.new-page-form label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.new-page-form select {
+  font: inherit; color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px 12px; background: #ffffff;
+}
+.banner-create {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 12px;
+}
+.banner-create legend { font-size: 14px; color: var(--muted); padding: 0 4px; }

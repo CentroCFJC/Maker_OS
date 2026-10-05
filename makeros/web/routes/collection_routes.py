@@ -35,6 +35,7 @@ from ..calendar import (
     parse_when,
 )
 from ..deps import ConnDep, UserDep, base_ctx, get_settings
+from ..forms import fields_for
 from ..icons import is_valid_icon
 from ..listing import collection_items, project_task_stats
 from ..render import render_markdown
@@ -296,6 +297,9 @@ async def new_page_form(collection: str, request: Request, conn: ConnDep, user: 
         return RedirectResponse("/login", status_code=303)
     if user["role"] not in EDIT_ROLES:
         raise HTTPException(status_code=403)
+    # Day-click prefill for calendar events.
+    fecha = request.query_params.get("fecha", "")
+    defaults = {"start": f"{fecha}T09:00"} if fecha and collection == "calendario" else {}
     return templates.TemplateResponse(
         request,
         "page_new.html",
@@ -305,7 +309,8 @@ async def new_page_form(collection: str, request: Request, conn: ConnDep, user: 
             user,
             collection_slug=collection,
             collection_label=info["label"],
-            fecha=request.query_params.get("fecha", ""),
+            form_fields=fields_for(collection),
+            defaults=defaults,
         ),
     )
 
@@ -316,18 +321,20 @@ async def create_page(
     request: Request,
     conn: ConnDep,
     user: UserDep,
-    title: str = Form(...),
-    body: str = Form(""),
-    start: str = Form(""),
-    end: str = Form(""),
-    location: str = Form(""),
 ):
+    """Create a page from the collection's typed form + seed template."""
     _collection_or_404(collection)
     settings = get_settings(request)
     if user is None:
         return RedirectResponse("/login", status_code=303)
     if user["role"] not in EDIT_ROLES:
         raise HTTPException(status_code=403)
+
+    form = await request.form()
+    title = str(form.get("title", "")).strip()
+    body = str(form.get("body", "")).strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="El título es obligatorio")
 
     info = COLLECTIONS[collection]
     meta, seed_body = _template_seed(settings, info["template"])
@@ -338,19 +345,39 @@ async def create_page(
     if "title" not in meta and "name" not in meta:
         meta["title"] = title
 
-    # Calendar events carry scheduling fields; end defaults to start.
-    if collection == "calendario":
-        start_dt = parse_when(start)
-        if start.strip() and start_dt is None:
-            raise HTTPException(status_code=400, detail="Fecha de inicio inválida")
-        end_dt = parse_when(end) if end.strip() else start_dt
-        if end.strip() and end_dt is None:
-            raise HTTPException(status_code=400, detail="Fecha de fin inválida")
-        if start_dt is not None:
-            meta["start"] = fmt_when(start_dt)
-            meta["end"] = fmt_when(end_dt or start_dt)
-        if location.strip():
-            meta["location"] = location.strip()
+    # Typed fields per collection; empty values keep the template seed.
+    for field in fields_for(collection):
+        name, kind = field["name"], field["kind"]
+        if name in ("title", "body", "banner"):
+            continue
+        value = str(form.get(name, "")).strip()
+        if not value:
+            continue
+        if kind in ("date", "datetime"):
+            parsed = parse_when(value)
+            if parsed is None:
+                raise HTTPException(
+                    status_code=400, detail=f"Fecha inválida en «{field['label']}»"
+                )
+            meta[name] = fmt_when(parsed)
+        elif kind == "select":
+            if value not in field["options"]:
+                raise HTTPException(
+                    status_code=400, detail=f"Valor inválido en «{field['label']}»"
+                )
+            meta[name] = value
+        elif kind == "url":
+            if not value.startswith(("http://", "https://")):
+                raise HTTPException(
+                    status_code=400, detail=f"La URL de «{field['label']}» debe empezar por http(s)://"
+                )
+            meta[name] = value
+        else:
+            meta[name] = value
+
+    # Calendar events: an event without an explicit end lasts until its start.
+    if collection == "calendario" and meta.get("start") and not meta.get("end"):
+        meta["end"] = meta["start"]
 
     page_path = _slugify(title)
     if collection == "projects":
@@ -364,9 +391,34 @@ async def create_page(
         n += 1
         file, _doc_id = _resolve_page(settings, collection, candidate)
 
-    frontmatter.write(file, meta, body.strip() or seed_body)
+    # Optional banner straight from the creation form.
+    _apply_banner_form(form, settings, meta, page_path.rsplit("/", 1)[0])
+
+    frontmatter.write(file, meta, body or seed_body)
     index_file(conn, settings.content_dir, file)
     return RedirectResponse(f"/{collection}/{candidate}", status_code=303)
+
+
+def _apply_banner_form(form, settings, meta: dict, stem: str) -> None:
+    """Store an uploaded or remote banner from the creation form."""
+    upload = form.get("banner_file")
+    filename = getattr(upload, "filename", "") or ""
+    if filename:
+        ext = Path(filename).suffix.lower().lstrip(".")
+        if ext not in UPLOAD_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Formato de imagen no permitido")
+        data = upload.file.read()
+        if len(data) > MAX_BANNER_BYTES:
+            raise HTTPException(status_code=400, detail="La imagen supera 5 MB")
+        name = f"{_slugify(stem)}-{secrets.token_hex(4)}.{ext}"
+        (_uploads_dir(settings) / name).write_bytes(data)
+        meta["banner"] = f"/media/{name}"
+        return
+    url = str(form.get("banner_url", "")).strip()
+    if url:
+        if not url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="La URL debe empezar por http(s)://")
+        meta["banner"] = url
 
 
 def _load_for_edit(settings, collection: str, page_path: str) -> tuple[Path, dict, str]:
