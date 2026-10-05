@@ -1,0 +1,14 @@
+# MakerOS reverse proxy.
+# Plain HTTP on :8080 for the university network / tailnet.
+# For TLS inside the tailnet with Tailscale's certs, replace the site
+# address with your MagicDNS name (e.g. makeros.box-c.ts.net) and use
+# the tls internal or tailscale directive.
+
+:8080 {
+	reverse_proxy app:8000
+	header {
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+	}
+}

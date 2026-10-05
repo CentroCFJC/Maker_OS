@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+
+# MakerOS local data (never commit the index, secrets or private notes)
+data/
+private/
+*.db
+*.db-wal
+*.db-shm
+.env
+
+# OS
+.DS_Store

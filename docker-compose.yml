@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Set this in .env (see .env.example) — required in production.
+      MAKEROS_SECRET_KEY: ${MAKEROS_SECRET_KEY:?set MAKEROS_SECRET_KEY in .env}
+    volumes:
+      - makeros-data:/data
+      - ./content:/data/content
+      - ./private:/data/private
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  makeros-data:
+  caddy-data:
+  caddy-config:

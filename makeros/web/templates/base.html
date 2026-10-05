@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MakerOS{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/makeros.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Maker<span>OS</span></a>
+    <nav class="main-nav">
+      <a href="/">Inicio</a>
+      <a href="/wiki">Wiki</a>
+    </nav>
+    <form class="searchbox" action="/search" method="get">
+      <input type="search" name="q" placeholder="Buscar…" aria-label="Buscar" value="">
+    </form>
+    {% if user %}
+    <div class="userbox">
+      <span class="user-name">{{ user["display_name"] or user["username"] }}</span>
+      <form action="/logout" method="post">
+        <button type="submit" class="btn-ghost">Salir</button>
+      </form>
+    </div>
+    {% endif %}
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">MakerOS · Centro de Ciencia FJC · Markdown es la fuente de verdad</footer>
+</body>
+</html>

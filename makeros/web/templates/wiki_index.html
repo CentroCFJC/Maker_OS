@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Wiki{% endblock %}
+{% block content %}
+<h1>Wiki</h1>
+<ul class="page-list">
+  {% for page in pages %}
+  <li>
+    <a href="/wiki/{{ page["path"] }}">{{ page["title"] or page["path"] }}</a>
+    <span class="muted">· actualizado {{ page["indexed_at"] }}</span>
+  </li>
+  {% else %}
+  <li class="muted">La wiki está vacía. Crea un archivo en <code>content/wiki/</code>.</li>
+  {% endfor %}
+</ul>
+{% endblock %}

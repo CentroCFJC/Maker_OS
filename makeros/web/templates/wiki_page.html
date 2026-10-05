@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — {{ title }}{% endblock %}
+{% block content %}
+<article class="wiki-page">
+  <header>
+    <p class="breadcrumb"><a href="/wiki">Wiki</a> / {{ title }}</p>
+    <h1>{{ title }}</h1>
+    {% if meta.get("tags") %}
+    <p class="tags">
+      {% for tag in meta.get("tags", []) %}<span class="tag">{{ tag }}</span>{% endfor %}
+    </p>
+    {% endif %}
+  </header>
+  <div class="markdown">{{ html | safe }}</div>
+</article>
+{% endblock %}
