@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from ... import frontmatter
 from ...collections import COLLECTIONS, STATUS_FILTERS
+from ...frontmatter import FrontmatterError
 from ...indexer import index_file, remove_document
 from ...ui import set_ui
 from ..blocks import BLOCK_SEEDS, join_blocks, split_blocks
@@ -35,7 +36,7 @@ from ..calendar import (
 )
 from ..deps import ConnDep, UserDep, base_ctx, get_settings
 from ..icons import is_valid_icon
-from ..listing import collection_items
+from ..listing import collection_items, project_task_stats
 from ..render import render_markdown
 from ..templates import templates
 
@@ -259,7 +260,9 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
         vista = remember = None
     if vista is None:
         vista = request.cookies.get("vista", "lista")
-    items = collection_items(conn, collection)
+    items = collection_items(
+        conn, collection, task_stats=project_task_stats(conn) if collection == "projects" else None
+    )
     # Optional status filter (chips on projects/tasks index pages).
     estado = request.query_params.get("estado", "todos")
     if estado not in STATUS_FILTERS.get(collection, {}) and estado != "todos":
@@ -519,6 +522,107 @@ async def add_block(
     texts.insert(position, BLOCK_SEEDS[tipo])
     _save_blocks(conn, settings, file, meta, texts)
     return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
+
+
+@router.post("/{collection}/{page_path:path}/bloques/{block_index:int}/duplicar")
+async def duplicate_block(
+    collection: str,
+    page_path: str,
+    block_index: int,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+):
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, collection, page_path)
+    blocks = split_blocks(body)
+    if not _valid_index(blocks, block_index):
+        raise HTTPException(status_code=404)
+    texts = [b.text for b in blocks]
+    texts.insert(block_index + 1, texts[block_index])
+    _save_blocks(conn, settings, file, meta, texts)
+    return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
+
+
+@router.post("/{collection}/{page_path:path}/bloques/{block_index:int}/mover")
+async def move_block(
+    collection: str,
+    page_path: str,
+    block_index: int,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    hacia: str = Form(...),
+):
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    if hacia not in ("arriba", "abajo"):
+        raise HTTPException(status_code=400)
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, collection, page_path)
+    blocks = split_blocks(body)
+    if not _valid_index(blocks, block_index):
+        raise HTTPException(status_code=404)
+    swap_with = block_index - 1 if hacia == "arriba" else block_index + 1
+    if not _valid_index(blocks, swap_with):
+        return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
+    texts = [b.text for b in blocks]
+    texts[block_index], texts[swap_with] = texts[swap_with], texts[block_index]
+    _save_blocks(conn, settings, file, meta, texts)
+    return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
+
+
+@router.get("/{collection}/plantilla")
+async def template_form(collection: str, request: Request, conn: ConnDep, user: UserDep):
+    """Edit the seed template applied to every new page of a collection."""
+    info = _collection_or_404(collection)
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    path = settings.templates_dir / info["template"]
+    current = ""
+    if path.is_file():
+        meta, body = frontmatter.read(path)
+        current = frontmatter.dump(meta, body)
+    return templates.TemplateResponse(
+        request,
+        "template_form.html",
+        base_ctx(
+            request,
+            conn,
+            user,
+            collection_slug=collection,
+            collection_label=info["label"],
+            template_name=info["template"],
+            current=current,
+        ),
+    )
+
+
+@router.post("/{collection}/plantilla")
+async def template_save(
+    collection: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    text: str = Form(...),
+):
+    info = _collection_or_404(collection)
+    if user is None or user["role"] != "admin":
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    try:
+        meta, body = frontmatter.parse(text)
+    except FrontmatterError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"YAML de plantilla inválido: {exc}"
+        ) from None
+    frontmatter.write(settings.templates_dir / info["template"], meta, body)
+    return RedirectResponse(f"/{collection}", status_code=303)
 
 
 @router.post("/{collection}/{page_path:path}/icono")

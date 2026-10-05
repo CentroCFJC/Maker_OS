@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 from ...collections import PROJECT_STATUSES
 from ...indexer import recent_documents
 from ..deps import ConnDep, UserDep, base_ctx
-from ..listing import collection_items, unassigned_tasks
+from ..listing import collection_items, project_task_stats, unassigned_tasks
 from ..templates import templates
 
 router = APIRouter()
@@ -22,7 +22,7 @@ async def home(request: Request, conn: ConnDep, user: UserDep, estado: str = "to
         return RedirectResponse("/login", status_code=303)
     if estado not in PROJECT_STATUSES and estado != "todos":
         estado = "todos"
-    projects = collection_items(conn, "projects")
+    projects = collection_items(conn, "projects", task_stats=project_task_stats(conn))
     if estado != "todos":
         projects = [p for p in projects if p["status"] == estado]
     return templates.TemplateResponse(

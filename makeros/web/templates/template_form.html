@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Plantilla de {{ collection_label }}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/{{ collection_slug }}">{{ collection_label }}</a> / Plantilla</p>
+  <h1>Plantilla de {{ collection_label }}</h1>
+  <p class="page-subtitle">
+    Cada página nueva en {{ collection_label }} se crea con este contenido
+    ({{ template_name }}). Cámbialo aquí y las páginas nuevas saldrán así,
+    automáticamente. Las páginas ya creadas no se modifican.
+  </p>
+</header>
+
+<form method="post" action="/{{ collection_slug }}/plantilla" class="new-page-form template-form">
+  <label>Plantilla (YAML + Markdown)
+    <textarea name="text" rows="18" class="template-textarea"
+              placeholder="---
+title: ""
+---
+Contenido inicial…">{{ current }}</textarea>
+  </label>
+  <button type="submit" class="btn-primary">Guardar plantilla</button>
+</form>
+{% endblock %}

@@ -20,13 +20,13 @@ function makerosToggleSidebar(toggle) {
   }
 }
 
-// Card-grid density slider: column width AND card internals scale
-// together (--card-min drives the grid, --card-scale the contents).
+// Card-grid density slider: changes the column width only. Card text
+// stays at a fixed size; wider cards just reveal more (banner, dates,
+// progress, excerpt).
 function makerosCardSize(value) {
   var v = parseInt(value, 10) || 220;
   document.querySelectorAll(".card-grid").forEach(function (grid) {
     grid.style.setProperty("--card-min", v + "px");
-    grid.style.setProperty("--card-scale", v / 220);
   });
   try {
     localStorage.setItem("makeros-card-min", value);

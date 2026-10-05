@@ -1,20 +1,45 @@
 {% for b in blocks %}
 <div class="block" id="block-{{ b["i"] }}">
   {% if user and user["role"] != "viewer" %}
-  <div class="block-controls">
-    <button class="btn-mini" title="Editar bloque"
-            hx-get="{{ page_url }}/bloques/{{ b["i"] }}/editar"
-            hx-target="#block-{{ b["i"] }}" hx-swap="outerHTML">Editar</button>
-    <form method="post" action="{{ page_url }}/bloques/{{ b["i"] }}/borrar"
-          onsubmit="return confirm('¿Eliminar este bloque?');">
-      <button type="submit" class="btn-mini" title="Eliminar bloque">Eliminar</button>
-    </form>
-    <form method="post" action="{{ page_url }}/bloques/nuevo" class="add-below">
-      <input type="hidden" name="tipo" value="parrafo">
-      <input type="hidden" name="despues" value="{{ b["i"] }}">
-      <button type="submit" class="btn-mini" title="Añadir bloque debajo">+</button>
-    </form>
-  </div>
+  <details class="block-menu">
+    <summary title="Opciones del bloque" aria-label="Opciones del bloque">
+      {{ icon("more-vertical") }}
+    </summary>
+    <div class="block-menu-panel">
+      <button class="menu-item" title="Editar bloque"
+              hx-get="{{ page_url }}/bloques/{{ b["i"] }}/editar"
+              hx-target="#block-{{ b["i"] }}" hx-swap="outerHTML">
+        {{ icon("edit-2") }}<span>Editar</span>
+      </button>
+      <form method="post" action="{{ page_url }}/bloques/{{ b["i"] }}/duplicar">
+        <button type="submit" class="menu-item">{{ icon("copy") }}<span>Duplicar</span></button>
+      </form>
+      <form method="post" action="{{ page_url }}/bloques/{{ b["i"] }}/mover">
+        <input type="hidden" name="hacia" value="arriba">
+        <button type="submit" class="menu-item">{{ icon("arrow-up") }}<span>Mover arriba</span></button>
+      </form>
+      <form method="post" action="{{ page_url }}/bloques/{{ b["i"] }}/mover">
+        <input type="hidden" name="hacia" value="abajo">
+        <button type="submit" class="menu-item">{{ icon("arrow-down") }}<span>Mover abajo</span></button>
+      </form>
+      <p class="menu-label">Añadir debajo</p>
+      {% for tipo, label in block_types.items() %}
+      <form method="post" action="{{ page_url }}/bloques/nuevo">
+        <input type="hidden" name="despues" value="{{ b["i"] }}">
+        <input type="hidden" name="tipo" value="{{ tipo }}">
+        <button type="submit" class="menu-item menu-add">
+          {{ icon(block_icons[tipo]) }}<span>{{ label }}</span>
+        </button>
+      </form>
+      {% endfor %}
+      <form method="post" action="{{ page_url }}/bloques/{{ b["i"] }}/borrar"
+            onsubmit="return confirm('¿Eliminar este bloque?');">
+        <button type="submit" class="menu-item menu-danger">
+          {{ icon("trash-2") }}<span>Eliminar</span>
+        </button>
+      </form>
+    </div>
+  </details>
   {% endif %}
   <div class="block-content">{{ b["html"] | safe }}</div>
 </div>

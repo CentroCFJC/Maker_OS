@@ -13,6 +13,10 @@
            href="/{{ collection_slug }}?vista=tarjetas{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Tarjetas</a>
       </nav>
       {% include "_section_icon_picker.html" %}
+      {% if user and user["role"] == "admin" %}
+      <a class="btn-ghost" href="/{{ collection_slug }}/plantilla"
+         title="Editar el contenido con el que se crean las páginas nuevas de {{ collection_label }}">Plantilla</a>
+      {% endif %}
       {% if user and user["role"] != "viewer" %}
       <a class="btn-primary" href="/{{ collection_slug }}/nuevo">+ Añadir</a>
       {% endif %}
@@ -21,10 +25,12 @@
   {% if status_filters %}
   <div class="chip-row" aria-label="Filtro por estado">
     <a class="filter-chip{% if estado == 'todos' %} active{% endif %}"
-       href="/{{ collection_slug }}?estado=todos&vista={{ vista }}">Todos</a>
+       href="/{{ collection_slug }}?estado=todos&vista={{ vista }}"
+       title="{{ status_help.get('todos', '') }}">Todos</a>
     {% for value, label in status_filters.items() %}
     <a class="filter-chip{% if estado == value %} active{% endif %}"
-       href="/{{ collection_slug }}?estado={{ value }}&vista={{ vista }}">{{ label }}</a>
+       href="/{{ collection_slug }}?estado={{ value }}&vista={{ vista }}"
+       title="{{ status_help.get(value, '') }}">{{ label }}</a>
     {% endfor %}
   </div>
   {% endif %}
@@ -39,16 +45,7 @@
 <div class="card-grid">
   {% for item in items %}
   <a class="item-card" href="/{{ item["path"] }}">
-    {% if item["banner"] %}<span class="card-banner" style="background-image: url('{{ item["banner"] }}')"></span>{% endif %}
-    <div class="card-head">
-      <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("file", cls="icon icon-lg") }}</span>
-      {% if item["status"] in status_labels %}
-      <span class="badge st-{{ item["status"] }}">{{ status_labels[item["status"]] }}</span>
-      {% endif %}
-    </div>
-    <span class="card-title">{{ item["title"] or item["path"] }}</span>
-    {% if item["dates"] %}<span class="card-dates">{{ item["dates"] }}</span>{% endif %}
-    <span class="card-meta">actualizado {{ item["indexed_at"] }}</span>
+    {% include "_card.html" %}
   </a>
   {% else %}
   <p class="item-empty">Todavía no hay nada aquí. Añade la primera página con «+ Añadir».</p>

@@ -21,10 +21,10 @@
     <h2>Proyectos</h2>
     <div class="chip-row" aria-label="Filtro de proyectos">
       <a class="filter-chip{% if estado == 'todos' %} active{% endif %}"
-         href="/?estado=todos">Todos</a>
+         href="/?estado=todos" title="{{ status_help.get('todos', '') }}">Todos</a>
       {% for value, label in project_statuses.items() %}
       <a class="filter-chip{% if estado == value %} active{% endif %}"
-         href="/?estado={{ value }}">{{ label }}</a>
+         href="/?estado={{ value }}" title="{{ status_help.get(value, '') }}">{{ label }}</a>
       {% endfor %}
     </div>
   </div>
@@ -32,16 +32,7 @@
   <div class="card-grid">
     {% for item in projects %}
     <a class="item-card project-card" href="/{{ item["path"] }}">
-      {% if item["banner"] %}<span class="card-banner" style="background-image: url('{{ item["banner"] }}')"></span>{% endif %}
-      <div class="card-head">
-        <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("layers", cls="icon icon-lg") }}</span>
-        {% if item["status"] in status_labels %}
-        <span class="badge st-{{ item["status"] }}">{{ status_labels[item["status"]] }}</span>
-        {% endif %}
-      </div>
-      <span class="card-title">{{ item["title"] or item["path"] }}</span>
-      {% if item["dates"] %}<span class="card-dates">{{ item["dates"] }}</span>{% endif %}
-      <span class="card-meta">actualizado {{ item["indexed_at"] }}</span>
+      {% include "_card.html" %}
     </a>
     {% endfor %}
   </div>

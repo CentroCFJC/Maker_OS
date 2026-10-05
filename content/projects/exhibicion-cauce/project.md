@@ -27,3 +27,7 @@ miembro del equipo.
 ## Changelog
 
 - **2026-10-05** — Proyecto creado en MakerOS.
+
+| Columna 1 | Columna 2 |
+|---|---|
+|  |  |

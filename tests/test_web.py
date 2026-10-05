@@ -697,3 +697,142 @@ def test_banner_shows_on_cards(logged_in_client: TestClient, settings):
     cards = logged_in_client.get("/wiki?vista=tarjetas")
     assert "card-banner" in cards.text
     assert "https://example.com/x.png" in cards.text
+
+
+# ---------- Block menu, template editor, richer cards ----------
+
+def test_block_menu_replaces_overlapping_controls(logged_in_client: TestClient):
+    page = logged_in_client.get("/wiki/inicio")
+    assert "block-menu" in page.text
+    assert "more-vertical" in page.text
+    assert "block-controls" not in page.text
+    assert "Duplicar" in page.text
+    assert "Mover arriba" in page.text
+
+
+def test_block_duplicate_and_move(logged_in_client: TestClient, settings):
+    from makeros import frontmatter
+
+    # Duplicate the heading block.
+    response = logged_in_client.post(
+        "/wiki/inicio/bloques/0/duplicar", follow_redirects=False
+    )
+    assert response.status_code == 303
+    _meta, body = frontmatter.read(settings.content_dir / "wiki" / "inicio.md")
+    assert body.count("# Bienvenido") == 2
+
+    # Move the duplicated heading below the paragraph.
+    logged_in_client.post("/wiki/inicio/bloques/1/mover", data={"hacia": "abajo"})
+    _meta, body = frontmatter.read(settings.content_dir / "wiki" / "inicio.md")
+    chunks = body.split("\n\n")
+    assert chunks[0] == "# Bienvenido"
+    assert chunks[1].startswith("Este es el inicio")
+    assert chunks[2] == "# Bienvenido"
+
+    # Moving the last block up is a no-op redirect, not an error.
+    response = logged_in_client.post(
+        "/wiki/inicio/bloques/0/mover", data={"hacia": "arriba"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    bad = logged_in_client.post("/wiki/inicio/bloques/0/mover", data={"hacia": "lados"})
+    assert bad.status_code == 400
+
+
+def test_template_editor_roundtrip(logged_in_client: TestClient, settings):
+    form = logged_in_client.get("/wiki/plantilla")
+    assert form.status_code == 200
+    assert "Plantilla de Wiki" in form.text
+
+    new_template = '---\ntitle: ""\ntags: []\n---\n\nContenido inicial nuevo.'
+    response = logged_in_client.post(
+        "/wiki/plantilla", data={"text": new_template}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    from makeros import frontmatter
+
+    path = settings.templates_dir / "page.md"
+    assert path.is_file()
+    meta, body = frontmatter.read(path)
+    assert body.strip() == "Contenido inicial nuevo."
+
+    # The template now seeds new pages.
+    logged_in_client.post("/wiki/nuevo", data={"title": "Sembrada"})
+    _meta, seeded = frontmatter.read(settings.content_dir / "wiki" / "sembrada.md")
+    assert seeded.strip() == "Contenido inicial nuevo."
+
+
+def test_template_editor_rejects_bad_yaml_and_non_admin(logged_in_client: TestClient, settings):
+    bad = logged_in_client.post(
+        "/wiki/plantilla", data={"text": "---\ntitle: [unclosed\n---\n\nx"}
+    )
+    assert bad.status_code == 400
+
+    from makeros import auth
+    from makeros.db import connect, init_schema
+
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    auth.create_user(conn, "socio", "clave123", role="member")
+    conn.close()
+    logged_in_client.post("/logout")
+    logged_in_client.post("/login", data={"username": "socio", "password": "clave123"})
+    assert logged_in_client.get("/wiki/plantilla").status_code == 403
+
+
+def test_cards_show_extract_and_task_progress(logged_in_client: TestClient, settings):
+    from makeros.frontmatter import write as fm_write
+
+    fm_write(
+        settings.content_dir / "projects" / "cauce" / "project.md",
+        {"name": "CAUCE", "status": "active", "start": "2026-06-01",
+         "due": "2026-09-10"},
+        "Exhibición interactiva sobre el agua para el museo.",
+    )
+    fm_write(
+        settings.content_dir / "tasks" / "montar-cauce.md",
+        {"title": "Montar estructura", "status": "done", "project": "cauce"},
+        "Terminada.",
+    )
+    fm_write(
+        settings.content_dir / "tasks" / "pintar-cauce.md",
+        {"title": "Pintar paneles", "status": "todo", "project": "cauce"},
+        "Pendiente.",
+    )
+    fm_write(
+        settings.content_dir / "tasks" / "lista-compras.md",
+        {"title": "Lista de compras", "status": "todo", "project": ""},
+        "- [x] Filamento\n- [ ] PLA transparente\n- [ ] Cinta métrica",
+    )
+    _reindex(settings)
+
+    cards = logged_in_client.get("/projects?vista=tarjetas")
+    assert "Exhibición interactiva sobre el agua para el museo." in cards.text
+    assert "progress-bar" in cards.text
+    assert "1/2" in cards.text  # project task summary
+
+    task_cards = logged_in_client.get("/tasks?vista=tarjetas")
+    assert "1/3" in task_cards.text
+    assert "hechas" in task_cards.text
+
+
+def test_overdue_project_marked_in_cards(logged_in_client: TestClient, settings):
+    from datetime import date, timedelta
+
+    from makeros.frontmatter import write as fm_write
+
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    fm_write(
+        settings.content_dir / "projects" / "tarde" / "project.md",
+        {"name": "Proyecto atrasado", "status": "active", "due": yesterday},
+        "Se pasó de fecha.",
+    )
+    _reindex(settings)
+    cards = logged_in_client.get("/projects?vista=tarjetas")
+    assert "vencido" in cards.text
+
+
+def test_status_chips_have_tooltips(logged_in_client: TestClient):
+    page = logged_in_client.get("/projects")
+    assert 'title="Solo una idea' in page.text
+    home = logged_in_client.get("/")
+    assert 'title="Sin filtro' in home.text

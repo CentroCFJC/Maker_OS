@@ -12,6 +12,10 @@
         <a class="view-option" href="/calendario?m={{ next_month }}">Siguiente ›</a>
       </nav>
       {% include "_section_icon_picker.html" %}
+      {% if user and user["role"] == "admin" %}
+      <a class="btn-ghost" href="/calendario/plantilla"
+         title="Editar la plantilla de eventos nuevos">Plantilla</a>
+      {% endif %}
       {% if user and user["role"] != "viewer" %}
       <a class="btn-primary" href="/calendario/nuevo">+ Añadir evento</a>
       {% endif %}

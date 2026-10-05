@@ -37,5 +37,18 @@ TASK_STATUSES = {
     "done": "Terminada",
 }
 STATUS_LABELS = {**PROJECT_STATUSES, **TASK_STATUSES}
+# Tooltips for the filter chips, shown on hover.
+STATUS_HELP = {
+    "todos": "Sin filtro: todas las páginas de la colección.",
+    "idea": "Solo una idea: todavía no se planifica ni se ejecuta.",
+    "planning": "En planificación: se define el alcance y las tareas.",
+    "active": "En curso: hay trabajo activo ahora mismo.",
+    "paused": "En pausa: se retomará más adelante.",
+    "done": "Completado: el trabajo está terminado.",
+    "archived": "Archivado: se conserva solo como historial.",
+    "todo": "Pendiente: todavía sin empezar.",
+    "doing": "En proceso: alguien está trabajando en ella.",
+    "blocked": "Bloqueada: espera algo externo para avanzar.",
+}
 # Collections whose index page gets status filter chips.
 STATUS_FILTERS = {"projects": PROJECT_STATUSES, "tasks": TASK_STATUSES}

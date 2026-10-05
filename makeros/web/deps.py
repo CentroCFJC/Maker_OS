@@ -9,7 +9,7 @@ from typing import Annotated, Any
 from fastapi import Depends, Request
 
 from ..auth import get_user
-from ..collections import COLLECTIONS, STATUS_LABELS, TASK_STATUSES
+from ..collections import COLLECTIONS, STATUS_HELP, STATUS_LABELS, TASK_STATUSES
 from ..config import Settings
 from ..db import connect
 from ..indexer import collection_counts
@@ -60,6 +60,7 @@ def base_ctx(
         "icon_list": icon_names(),
         "today_events": todays_events(conn),
         "status_labels": STATUS_LABELS,
+        "status_help": STATUS_HELP,
         "task_status_labels": TASK_STATUSES,
     }
     ctx.update(extra)

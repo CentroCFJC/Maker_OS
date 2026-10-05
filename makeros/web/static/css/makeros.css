@@ -397,28 +397,34 @@ button, .btn-primary, .btn-ghost, .btn-mini, .btn-danger-ghost {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 220px), 1fr));
-  gap: calc(12px * var(--card-scale, 1));
+  gap: 12px;
 }
 .item-card {
-  display: flex; flex-direction: column; gap: calc(6px * var(--card-scale, 1));
+  display: flex; flex-direction: column; gap: 6px;
   border: 1px solid var(--border); border-radius: var(--radius);
-  padding: calc(14px * var(--card-scale, 1)); background: #ffffff;
+  padding: 14px; background: #ffffff;
 }
 .item-card:hover { border-color: var(--accent); background: var(--accent-soft); }
 .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .card-icon { display: flex; }
-.card-icon .icon {
-  color: var(--accent);
-  width: calc(28px * var(--card-scale, 1));
-  height: calc(28px * var(--card-scale, 1));
+.card-icon .icon { color: var(--accent); width: 28px; height: 28px; }
+.card-title { font-weight: 600; font-size: 15px; color: var(--text-title); }
+.card-meta { color: var(--muted); font-size: 12px; }
+.card-extract {
+  color: var(--muted); font-size: 13px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.card-title { font-weight: 600; font-size: calc(15px * var(--card-scale, 1)); color: var(--text-title); }
-.card-meta { color: var(--muted); font-size: calc(12px * var(--card-scale, 1)); }
+.card-dates.vencido { color: var(--danger); font-weight: 600; }
+.card-progress { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.progress-bar { flex: 1; height: 4px; border-radius: 999px; background: var(--ink-soft); overflow: hidden; }
+.progress-bar span { display: block; height: 100%; background: var(--accent); }
+.progress-label { font-variant-numeric: tabular-nums; }
 .card-banner {
-  height: calc(90px * var(--card-scale, 1)); flex: none;
+  height: 90px; flex: none;
   background: var(--sidebar-bg) center / cover no-repeat;
   border-radius: var(--radius) var(--radius) 0 0;
-  margin: calc(-14px * var(--card-scale, 1)) calc(-14px * var(--card-scale, 1)) calc(8px * var(--card-scale, 1));
+  margin: -14px -14px 8px;
 }
 
 /* ---------- Page banner (Notion-style cover) ---------- */
@@ -519,11 +525,34 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
 
 .block { position: relative; padding: 2px 0; }
 .block:hover { background: var(--sidebar-bg); }
-.block-controls {
-  position: absolute; left: -74px; top: 2px;
-  display: none; gap: 2px; opacity: 0.85;
+
+/* Three-dot block menu (replaces the old overlapping control row). */
+.block-menu {
+  position: absolute; top: 2px; right: 4px;
+  opacity: 0; z-index: 5;
 }
-.block:hover .block-controls, .block:focus-within .block-controls { display: flex; }
+.block:hover .block-menu,
+.block-menu[open],
+.block:focus-within .block-menu { opacity: 1; }
+.block-menu summary {
+  display: inline-flex; align-items: center; cursor: pointer; list-style: none;
+  color: var(--muted); padding: 2px 6px; border-radius: 4px;
+}
+.block-menu summary::-webkit-details-marker { display: none; }
+.block-menu summary:hover { background: var(--sidebar-hover); color: var(--text); }
+.block-menu-panel {
+  position: absolute; z-index: 40; right: 0; top: 100%;
+  width: min(300px, 80vw); max-height: 340px; overflow-y: auto;
+  background: #ffffff; border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(25, 23, 17, 0.15); padding: 6px;
+}
+.block-menu-panel form { display: contents; }
+.menu-label {
+  font-size: 11px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.05em; margin: 6px 8px 2px;
+}
+.menu-item.menu-danger { color: var(--danger); }
+.menu-item.menu-danger:hover { color: var(--danger); }
 .block-content { padding-left: 2px; }
 
 .block-editing textarea {
@@ -553,12 +582,11 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
 }
 .menu-item {
   background: transparent; display: flex; align-items: center; gap: 8px;
-  text-align: left; padding: 6px 10px;
+  text-align: left; padding: 6px 10px; width: 100%;
   font-size: 14px; color: var(--text); border-radius: 4px;
 }
-.menu-item .icon { flex: none; }
 .menu-item:hover { background: var(--sidebar-hover); }
-.add-below { display: inline; }
+.menu-item .icon { flex: none; }
 
 .page-actions { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
 
@@ -678,7 +706,13 @@ mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px;
   .home-section-head { align-items: flex-start; flex-direction: column; }
   .card-size { flex-wrap: wrap; }
   .card-size input[type="range"] { width: 150px; }
-  /* Block controls sit off-canvas on desktop; inline row on mobile. */
-  .block-controls { position: static; display: flex; margin-bottom: 4px; }
-  .block:hover .block-controls, .block:focus-within .block-controls { display: flex; }
+  /* No hover on touch: keep the block menu reachable. */
+  .block-menu { opacity: 1; }
+}
+
+/* ---------- Template editor ---------- */
+.template-form { max-width: 760px; }
+.template-textarea {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 14px; line-height: 1.5;
 }

@@ -1,0 +1,29 @@
+{% if item["banner"] %}<span class="card-banner" style="background-image: url('{{ item["banner"] }}')"></span>{% endif %}
+<div class="card-head">
+  <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("file", cls="icon icon-lg") }}</span>
+  {% if item["status"] in status_labels %}
+  <span class="badge st-{{ item["status"] }}">{{ status_labels[item["status"]] }}</span>
+  {% endif %}
+</div>
+<span class="card-title">{{ item["title"] or item["path"] }}</span>
+{% if item["dates"] %}
+<span class="card-dates{% if item["vencido"] %} vencido{% endif %}"
+      title="{% if item["vencido"] %}Fecha de vencimiento pasada{% else %}Fechas de inicio y vencimiento{% endif %}">
+  {{ item["dates"] }}</span>
+{% endif %}
+{% if item["extract"] %}<span class="card-extract">{{ item["extract"] }}</span>{% endif %}
+{% if item.get("tasks") and item["tasks"]["total"] %}
+{% set pct = (100 * item["tasks"]["done"] / item["tasks"]["total"]) | round | int %}
+<div class="card-progress" title="Tareas terminadas del proyecto">
+  <div class="progress-bar"><span style="width: {{ pct }}%"></span></div>
+  <span class="progress-label">{{ item["tasks"]["done"] }}/{{ item["tasks"]["total"] }}</span>
+</div>
+{% endif %}
+{% if item.get("checks_total") %}
+{% set cpct = (100 * item["checks_done"] / item["checks_total"]) | round | int %}
+<div class="card-progress" title="Elementos completados de la lista de tareas">
+  <div class="progress-bar"><span style="width: {{ cpct }}%"></span></div>
+  <span class="progress-label">{{ item["checks_done"] }}/{{ item["checks_total"] }} hechas</span>
+</div>
+{% endif %}
+<span class="card-meta">actualizado {{ item["indexed_at"] }}</span>

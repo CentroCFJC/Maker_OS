@@ -73,15 +73,26 @@ Phases delivered:
   (Notion covers): `banner` frontmatter (URL or `/media/...`),
   upload endpoint stores in `content/_uploads/` (png/jpg/webp/gif,
   5 MB max), served via login-gated `GET /media/{path}`; banners show
-  on page + cards. Card-size slider scales cards proportionally
-  (`--card-min` + `--card-scale`). IMPORTANT route-order fix:
-  `page_view` (catch-all `/{collection}/{page_path:path}`) must stay
-  registered LAST in its router — it shadowed the block GET routes
-  (inline edit forms 404'd) until it was moved.
+  on page + cards. IMPORTANT route-order fix: `page_view` (catch-all
+  `/{collection}/{page_path:path}`) must stay registered LAST in its
+  router — it shadowed the block GET routes (inline edit forms 404'd)
+  until it was moved.
+- **Block 3-dot menu + templates + rich cards** — done. Blocks hover
+  menu (more-vertical): Editar, Duplicar, Mover arriba/abajo,
+  Añadir debajo (full type list), Eliminar (routes: `.../duplicar`,
+  `.../mover` with `hacia`). Per-collection template editor
+  (`/{collection}/plantilla`, admin only) writes the seed template
+  applied to every new page; invalid YAML → 400. Cards no longer
+  scale text: the slider only sets `--card-min`; cards show banner,
+  status badge, dates (red "vencido" when due is past), a 2-line
+  extract of the body, progress bars (project task counts done/
+  total, task checklist counts) — computed in `makeros/web/listing.py`.
+  Filter chips (estado) have Spanish tooltips (`STATUS_HELP` in
+  collections.py) explaining each status.
 
-Verification state: **81 pytest tests passing, ruff clean**; new flows
-smoke-tested over HTTP (tables, callouts, slash menu, banner upload +
-media serving, inline edit form GET).
+Verification state: **88 pytest tests passing, ruff clean**; new flows
+smoke-tested over HTTP (block menu ops, template editor round-trip +
+seeding, card progress/extract, tooltips).
 
 Git: commits on `main` per feature. No remote configured yet.
 
@@ -126,7 +137,7 @@ cd /home/jacob/Downloads/Dev/MakerOS
 make setup                    # venv + editable install with dev deps
 make user u=jacob r=admin     # prompts password (getpass)
 make run                      # http://localhost:8000
-make test                     # pytest (81 tests)
+make test                     # pytest (88 tests)
 make lint                     # ruff
 # Docker: cp .env.example .env (set MAKEROS_SECRET_KEY) && make docker-up
 ```
