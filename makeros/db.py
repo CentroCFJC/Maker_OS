@@ -32,6 +32,11 @@ CREATE TABLE IF NOT EXISTS documents (
     indexed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS ui_settings (
+    key   TEXT PRIMARY KEY,             -- e.g. 'icon:wiki' (sidebar overrides)
+    value TEXT NOT NULL
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
     title, body,
     content = 'documents',

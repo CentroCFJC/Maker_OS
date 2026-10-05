@@ -16,6 +16,7 @@
                   class="icon-option none{% if not meta.get("icon") %} active{% endif %}">Ninguno</button>
           {% for name in icon_list %}
           <button type="submit" name="icon" value="{{ name }}" title="{{ name }}"
+                  aria-label="{{ name }}"
                   class="icon-option{% if meta.get("icon") == name %} active{% endif %}">
             {{ icon(name, cls="icon icon-lg") }}
           </button>

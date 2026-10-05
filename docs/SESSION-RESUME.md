@@ -44,10 +44,20 @@ Phases delivered:
   `location` frontmatter, and a subscribable ICS feed at
   `/calendario.ics` (the "connect to Google Calendar" path). Google
   two-way OAuth sync is NOT built yet.
+- **Design system + responsive UI** — done. CSS tokens come from the
+  CCFJC logo (indigo `#29265b`, red `#e42c45`/`#c92038` AA, orange
+  `#f4991f`); Schibsted Grotesk display font vendored in
+  `static/vendor/`. Sidebar icons per collection (defaults in
+  `makeros/collections.py`, admin overrides in the `ui_settings`
+  SQLite table via `makeros/ui.py` + `POST /ui/icono/<coll>`), mobile
+  off-canvas sidebar with toggle, block-editor controls go inline on
+  mobile, card-size slider (localStorage), skip link, focus-visible,
+  prefers-reduced-motion. Project skills in `.agents/skills/`
+  (frontend-design, accessibility, fastapi) informed this pass.
 
-Verification state: **63 pytest tests passing, ruff clean**; new flows
-smoke-tested over HTTP (calendar grid, event creation, ICS feed, icon
-picker).
+Verification state: **69 pytest tests passing, ruff clean**; new flows
+smoke-tested over HTTP (sidebar icons, section icon override, slider,
+font serving).
 
 Git: commits on `main` per feature. No remote configured yet.
 
@@ -92,7 +102,7 @@ cd /home/jacob/Downloads/Dev/MakerOS
 make setup                    # venv + editable install with dev deps
 make user u=jacob r=admin     # prompts password (getpass)
 make run                      # http://localhost:8000
-make test                     # pytest (63 tests)
+make test                     # pytest (69 tests)
 make lint                     # ruff
 # Docker: cp .env.example .env (set MAKEROS_SECRET_KEY) && make docker-up
 ```

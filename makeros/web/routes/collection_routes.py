@@ -20,6 +20,7 @@ from fastapi.responses import RedirectResponse, Response
 from ... import frontmatter
 from ...collections import COLLECTIONS
 from ...indexer import index_file, list_collection, remove_document
+from ...ui import set_ui
 from ..blocks import BLOCK_SEEDS, join_blocks, split_blocks
 from ..calendar import (
     WEEKDAYS_ES,
@@ -32,7 +33,7 @@ from ..calendar import (
     parse_when,
 )
 from ..deps import ConnDep, UserDep, base_ctx, get_settings
-from ..icons import icon_names, is_valid_icon
+from ..icons import is_valid_icon
 from ..render import render_markdown
 from ..templates import templates
 
@@ -126,6 +127,27 @@ def _date_span(meta: dict) -> str:
     if start_s and due_s:
         return f"{start_s} → {due_s}"
     return start_s or due_s
+
+
+@router.post("/ui/icono/{collection}")
+async def set_collection_icon(
+    collection: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    icon: str = Form(""),
+):
+    """Admins can restyle the sidebar: set (or reset) a collection's icon."""
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403)
+    _collection_or_404(collection)
+    icon = icon.strip()
+    if icon and not is_valid_icon(icon):
+        raise HTTPException(status_code=400)
+    set_ui(conn, f"icon:{collection}", icon)
+    return RedirectResponse(f"/{collection}", status_code=303)
 
 
 @router.get("/calendario.ics")
@@ -298,7 +320,6 @@ async def page_view(
             meta=meta,
             blocks=blocks,
             can_edit=user["role"] in EDIT_ROLES,
-            icon_list=icon_names(),
         ),
     )
 

@@ -6,21 +6,18 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 
 from ...auth import authenticate
-from ...collections import COLLECTIONS
-from ..deps import ConnDep, UserDep
+from ..deps import ConnDep, UserDep, base_ctx
 from ..templates import templates
 
 router = APIRouter()
 
 
 @router.get("/login")
-async def login_form(request: Request, user: UserDep):
+async def login_form(request: Request, conn: ConnDep, user: UserDep):
     if user is not None:
         return RedirectResponse("/", status_code=303)
     return templates.TemplateResponse(
-        request,
-        "login.html",
-        {"user": None, "error": None, "collections": COLLECTIONS, "counts": {}},
+        request, "login.html", base_ctx(request, conn, user, error=None)
     )
 
 
@@ -28,19 +25,21 @@ async def login_form(request: Request, user: UserDep):
 async def login(
     request: Request,
     conn: ConnDep,
+    user: UserDep,
     username: str = Form(...),
     password: str = Form(...),
 ):
-    user = authenticate(conn, username, password)
-    if user is None:
+    if user is not None:
+        return RedirectResponse("/", status_code=303)
+    logged_in = authenticate(conn, username, password)
+    if logged_in is None:
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"user": None, "error": "Usuario o contraseña incorrectos.",
-             "collections": COLLECTIONS, "counts": {}},
+            base_ctx(request, conn, user, error="Usuario o contraseña incorrectos."),
             status_code=401,
         )
-    request.session["uid"] = user["id"]
+    request.session["uid"] = logged_in["id"]
     return RedirectResponse("/", status_code=303)
 
 

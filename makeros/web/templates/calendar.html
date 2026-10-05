@@ -11,6 +11,7 @@
         <a class="view-option" href="/calendario">Hoy</a>
         <a class="view-option" href="/calendario?m={{ next_month }}">Siguiente ›</a>
       </nav>
+      {% include "_section_icon_picker.html" %}
       {% if user and user["role"] != "viewer" %}
       <a class="btn-primary" href="/calendario/nuevo">+ Añadir evento</a>
       {% endif %}
@@ -29,7 +30,8 @@
       <span class="cal-daynum">{{ day["date"].day }}</span>
       {% if user and user["role"] != "viewer" %}
       <a class="cal-add" href="/calendario/nuevo?fecha={{ day["iso"] }}"
-         title="Añadir evento el {{ day["iso"] }}">+</a>
+         title="Añadir evento el {{ day["iso"] }}"
+         aria-label="Añadir evento el {{ day["iso"] }}">+</a>
       {% endif %}
     </div>
     {% for item in day["items"] %}

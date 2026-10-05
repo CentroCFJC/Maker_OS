@@ -9,6 +9,7 @@
 <section class="category-grid">
   {% for slug, c in collections.items() %}
   <a class="category-card" href="/{{ slug }}">
+    <span class="category-icon">{{ icon(nav_icons.get(slug), cls="icon icon-lg") }}</span>
     <span class="category-name">{{ c["label"] }}</span>
     <span class="category-count">{{ counts.get(slug, 0) }} páginas</span>
   </a>

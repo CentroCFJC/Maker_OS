@@ -1,0 +1,21 @@
+{% if user and user["role"] == "admin" %}
+<details class="icon-picker section-icon-picker">
+  <summary>{{ icon(nav_icons.get(collection_slug)) }}<span>Icono de la sección</span></summary>
+  <form method="post" action="/ui/icono/{{ collection_slug }}" class="icon-grid-form">
+    <input class="icon-search" type="search" placeholder="Filtrar iconos…"
+           aria-label="Filtrar iconos de la sección"
+           oninput="makerosFilterIcons(this.value)">
+    <div class="icon-grid">
+      <button type="submit" name="icon" value="" title="Predeterminado"
+              class="icon-option none">Predeterminado</button>
+      {% for name in icon_list %}
+      <button type="submit" name="icon" value="{{ name }}" title="{{ name }}"
+              aria-label="{{ name }}"
+              class="icon-option{% if nav_icons.get(collection_slug) == name %} active{% endif %}">
+        {{ icon(name, cls="icon icon-lg") }}
+      </button>
+      {% endfor %}
+    </div>
+  </form>
+</details>
+{% endif %}

@@ -10,6 +10,14 @@
   <script src="/static/js/makeros.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false"
+          onclick="makerosToggleSidebar(this)">
+    <svg class="icon" aria-hidden="true"><use href="/static/vendor/feather-sprite.svg#menu"/></svg>
+    Menú
+  </button>
+  <div class="sidebar-backdrop" onclick="makerosToggleSidebar(document.querySelector('.nav-toggle'))"
+       aria-hidden="true"></div>
   <aside class="sidebar">
     <a class="brand" href="/">
       <img src="/static/img/logo.png" alt="MakerOS" class="brand-logo">
@@ -20,10 +28,14 @@
       <input type="search" name="q" placeholder="Buscar…" aria-label="Buscar">
     </form>
 
-    <nav class="sidebar-nav">
-      <a class="nav-item" href="/"><span class="nav-label">Inicio</span></a>
+    <nav class="sidebar-nav" aria-label="Secciones">
+      <a class="nav-item" href="/">
+        {{ icon("home") }}
+        <span class="nav-label">Inicio</span>
+      </a>
       {% for slug, c in collections.items() %}
       <a class="nav-item" href="/{{ slug }}">
+        {{ icon(nav_icons.get(slug)) }}
         <span class="nav-label">{{ c["label"] }}</span>
         {% if counts.get(slug, 0) > 0 %}<span class="nav-count">{{ counts[slug] }}</span>{% endif %}
       </a>
@@ -44,7 +56,7 @@
     {% endif %}
   </aside>
 
-  <main class="content">
+  <main class="content" id="contenido">
     {% block content %}{% endblock %}
   </main>
 </body>

@@ -12,12 +12,21 @@
         <a class="view-option{% if vista == 'tarjetas' %} active{% endif %}"
            href="/{{ collection_slug }}?vista=tarjetas">Tarjetas</a>
       </nav>
+      {% include "_section_icon_picker.html" %}
       {% if user and user["role"] != "viewer" %}
       <a class="btn-primary" href="/{{ collection_slug }}/nuevo">+ Añadir</a>
       {% endif %}
     </div>
   </div>
 </header>
+
+{% if vista == "tarjetas" %}
+<div class="card-size">
+  <label for="card-size">Tamaño de tarjetas</label>
+  <input type="range" id="card-size" class="card-size-input" min="180" max="480" step="20"
+         value="220" oninput="makerosCardSize(this.value)">
+</div>
+{% endif %}
 
 {% if vista == "tarjetas" %}
 <div class="card-grid">

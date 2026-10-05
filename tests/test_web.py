@@ -444,3 +444,62 @@ def test_icon_picker_is_a_visual_grid(logged_in_client: TestClient):
     assert 'class="icon-grid"' in response.text
     assert 'name="icon" value="zap"' in response.text
     assert "makerosFilterIcons" in response.text
+
+
+# ---------- Sidebar icons + card slider ----------
+
+def test_sidebar_shows_default_collection_icons(logged_in_client: TestClient):
+    response = logged_in_client.get("/")
+    assert "feather-sprite.svg#book-open" in response.text
+    assert "feather-sprite.svg#calendar" in response.text
+    assert response.text.count("feather-sprite.svg#") >= 9
+
+
+def test_admin_can_change_collection_icon(logged_in_client: TestClient):
+    response = logged_in_client.post(
+        "/ui/icono/wiki", data={"icon": "zap"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/wiki"
+    assert "feather-sprite.svg#zap" in logged_in_client.get("/").text
+
+    # The collection page offers the section picker with the active icon.
+    page = logged_in_client.get("/wiki")
+    assert "Icono de la sección" in page.text
+
+    # Empty value resets to the code default.
+    logged_in_client.post("/ui/icono/wiki", data={"icon": ""})
+    assert "feather-sprite.svg#book-open" in logged_in_client.get("/").text
+
+
+def test_invalid_collection_icon_rejected(logged_in_client: TestClient):
+    response = logged_in_client.post("/ui/icono/wiki", data={"icon": "no-existe"})
+    assert response.status_code == 400
+
+
+def test_only_admin_changes_collection_icon(logged_in_client: TestClient, settings):
+    from makeros import auth
+    from makeros.db import connect, init_schema
+
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    auth.create_user(conn, "socio", "clave123", role="member")
+    conn.close()
+    logged_in_client.post("/logout")
+    logged_in_client.post("/login", data={"username": "socio", "password": "clave123"})
+
+    response = logged_in_client.post("/ui/icono/wiki", data={"icon": "zap"})
+    assert response.status_code == 403
+    picker = logged_in_client.get("/wiki")
+    assert "Icono de la sección" not in picker.text
+
+
+def test_card_size_slider_in_grid_view(logged_in_client: TestClient):
+    response = logged_in_client.get("/wiki?vista=tarjetas")
+    assert response.status_code == 200
+    assert 'class="card-size-input"' in response.text
+    assert "makerosCardSize" in response.text
+
+
+def test_vendored_font_served(client: TestClient):
+    assert client.get("/static/vendor/schibsted-grotesk.woff2").status_code == 200

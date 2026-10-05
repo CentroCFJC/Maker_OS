@@ -13,6 +13,8 @@ from ..collections import COLLECTIONS
 from ..config import Settings
 from ..db import connect
 from ..indexer import collection_counts
+from ..ui import collection_icons
+from .icons import icon_names
 
 
 def get_settings(request: Request) -> Settings:
@@ -47,8 +49,14 @@ UserDep = Annotated[sqlite3.Row | None, Depends(current_user)]
 def base_ctx(
     request: Request, conn: sqlite3.Connection, user: sqlite3.Row | None, **extra: Any
 ) -> dict[str, Any]:
-    """Common template context: user, collection nav with live counts."""
+    """Common template context: user, collection nav with live counts + icons."""
     counts = {row["collection"]: row["n"] for row in collection_counts(conn)}
-    ctx: dict[str, Any] = {"user": user, "counts": counts, "collections": COLLECTIONS}
+    ctx: dict[str, Any] = {
+        "user": user,
+        "counts": counts,
+        "collections": COLLECTIONS,
+        "nav_icons": collection_icons(conn),
+        "icon_list": icon_names(),
+    }
     ctx.update(extra)
     return ctx
