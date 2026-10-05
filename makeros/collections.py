@@ -12,7 +12,7 @@ COLLECTIONS: dict[str, dict[str, str]] = {
     "wiki": {"label": "Wiki", "template": "page.md"},
     "projects": {"label": "Proyectos", "template": "project.md"},
     "tasks": {"label": "Tareas", "template": "task.md"},
-    "events": {"label": "Eventos", "template": "event.md"},
+    "calendario": {"label": "Calendario", "template": "event.md"},
     "research": {"label": "Repositorios", "template": "research.md"},
     "people": {"label": "Personas", "template": "person.md"},
     "inventory": {"label": "Inventario", "template": "inventory.md"},

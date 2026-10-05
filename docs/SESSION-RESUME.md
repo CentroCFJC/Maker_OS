@@ -32,13 +32,24 @@ Phases delivered:
   parrafo, lista, checklist, tabla, codigo, cita) with add/edit/delete;
   inline edit via htmx; writes go through `makeros/frontmatter.py` and
   refresh the index immediately.
+- **Per-page icons + list/grid views** — done. Vendored Feather sprite
+  (`static/vendor/feather-sprite.svg`, icon names parsed from it in
+  `makeros/web/icons.py`), `icon` frontmatter field set via a visual
+  grid picker on each page (`POST /{coll}/{page}/icono`), and a
+  per-user list-vs-cards toggle on collection indexes (`vista` cookie).
+- **Calendar** — done. The former `events` collection is now
+  `calendario` (URL `/calendario`, dir `content/calendario/`). Own SSR
+  month grid (`makeros/web/calendar.py`) with event chips and project
+  start/due chips, day-click event creation with `start`/`end`/
+  `location` frontmatter, and a subscribable ICS feed at
+  `/calendario.ics` (the "connect to Google Calendar" path). Google
+  two-way OAuth sync is NOT built yet.
 
-Verification state: **49 pytest tests passing, ruff clean**, and the
-full flow was smoke-tested over HTTP (login, sidebar, category pages,
-create page, block add, htmx inline edit, watcher live reindex).
+Verification state: **63 pytest tests passing, ruff clean**; new flows
+smoke-tested over HTTP (calendar grid, event creation, ICS feed, icon
+picker).
 
-Git: two commits on `main` (`6aa5895` skeleton, `4b5fd95` Notion UI).
-No remote configured yet.
+Git: commits on `main` per feature. No remote configured yet.
 
 ## Key architecture facts (do not relearn the hard way)
 
@@ -81,7 +92,7 @@ cd /home/jacob/Downloads/Dev/MakerOS
 make setup                    # venv + editable install with dev deps
 make user u=jacob r=admin     # prompts password (getpass)
 make run                      # http://localhost:8000
-make test                     # pytest (49 tests)
+make test                     # pytest (63 tests)
 make lint                     # ruff
 # Docker: cp .env.example .env (set MAKEROS_SECRET_KEY) && make docker-up
 ```
@@ -94,7 +105,7 @@ Env config: `MAKEROS_CONTENT_DIR`, `MAKEROS_PRIVATE_DIR`,
 - `content/wiki/`: inicio, guia-del-sistema, plantillas
 - `content/research/`: noclip-website, klipper, openscad
 - `content/projects/exhibicion-cauce/project.md`
-- `content/people/jacob.md`, `content/events/reunion-semanal.md`
+- `content/people/jacob.md`, `content/calendario/reunion-semanal.md`
 - `templates/`: page, project, task, event, research, person, device,
   inventory
 
@@ -106,8 +117,9 @@ Env config: `MAKEROS_CONTENT_DIR`, `MAKEROS_PRIVATE_DIR`,
 2. People pages wiring (profile page: their tasks and projects).
 3. Activity tracking table + monthly report generator (plan 2.9).
 4. My-day view.
-5. Later: exhibits live status, inventory, calendar sync, vault,
-   AI layer (all degrade gracefully without an LLM).
+5. Later: exhibits live status, inventory, Google Calendar two-way
+   sync (OAuth; ICS feed already done), vault, AI layer (all degrade
+   gracefully without an LLM).
 
 ## Standing rules
 

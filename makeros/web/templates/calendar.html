@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Calendario{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / {{ collection_label }}</p>
+  <div class="page-header-row">
+    <h1>{{ month_title }}</h1>
+    <div class="header-actions">
+      <nav class="view-toggle" aria-label="Mes">
+        <a class="view-option" href="/calendario?m={{ prev_month }}">‹ Anterior</a>
+        <a class="view-option" href="/calendario">Hoy</a>
+        <a class="view-option" href="/calendario?m={{ next_month }}">Siguiente ›</a>
+      </nav>
+      {% if user and user["role"] != "viewer" %}
+      <a class="btn-primary" href="/calendario/nuevo">+ Añadir evento</a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<div class="cal-weekdays">
+  {% for wd in weekdays %}<span>{{ wd }}</span>{% endfor %}
+</div>
+<div class="cal-grid">
+  {% for week in weeks %}
+  {% for day in week %}
+  <div class="cal-day{% if not day["in_month"] %} out-month{% endif %}{% if day["is_today"] %} today{% endif %}">
+    <div class="cal-day-head">
+      <span class="cal-daynum">{{ day["date"].day }}</span>
+      {% if user and user["role"] != "viewer" %}
+      <a class="cal-add" href="/calendario/nuevo?fecha={{ day["iso"] }}"
+         title="Añadir evento el {{ day["iso"] }}">+</a>
+      {% endif %}
+    </div>
+    {% for item in day["items"] %}
+    <a class="cal-chip {{ item.kind }}" href="/{{ item.path }}"
+       title="{{ item.title }}{% if item.time %} ({{ item.time }}){% endif %}">
+      {% if item.time %}<span class="cal-chip-time">{{ item.time }}</span>{% endif %}
+      {{ item.title }}
+    </a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% endfor %}
+</div>
+
+<details class="cal-connect">
+  <summary>Conectar con Google Calendar</summary>
+  <p>Cualquier aplicación de calendario puede seguir este canal:</p>
+  <ol>
+    <li>En Google Calendar, abre «Otros calendarios» y elige «Desde la URL».</li>
+    <li>Pega esta dirección y guarda:
+      <code class="cal-feed-url">{{ feed_url }}</code>
+    </li>
+  </ol>
+  <p>Google volverá a leer el canal cada vez que se reindexe un evento.</p>
+</details>
+{% endblock %}

@@ -25,6 +25,7 @@
   <a class="item-card" href="/{{ item["path"] }}">
     <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("file", cls="icon icon-lg") }}</span>
     <span class="card-title">{{ item["title"] or item["path"] }}</span>
+    {% if item["dates"] %}<span class="card-dates">{{ item["dates"] }}</span>{% endif %}
     <span class="card-meta">actualizado {{ item["indexed_at"] }}</span>
   </a>
   {% else %}
@@ -37,6 +38,7 @@
   <li class="item-row">
     <span class="row-icon">{{ icon(item["icon"]) }}</span>
     <a class="item-title" href="/{{ item["path"] }}">{{ item["title"] or item["path"] }}</a>
+    {% if item["dates"] %}<span class="item-meta dates">{{ item["dates"] }}</span>{% endif %}
     <span class="item-meta">actualizado {{ item["indexed_at"] }}</span>
   </li>
   {% else %}

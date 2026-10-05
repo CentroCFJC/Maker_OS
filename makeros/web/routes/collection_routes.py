@@ -11,15 +11,26 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 
 from ... import frontmatter
 from ...collections import COLLECTIONS
 from ...indexer import index_file, list_collection, remove_document
 from ..blocks import BLOCK_SEEDS, join_blocks, split_blocks
+from ..calendar import (
+    WEEKDAYS_ES,
+    build_ics,
+    day_map,
+    fmt_when,
+    month_grid,
+    month_label,
+    parse_month,
+    parse_when,
+)
 from ..deps import ConnDep, UserDep, base_ctx, get_settings
 from ..icons import icon_names, is_valid_icon
 from ..render import render_markdown
@@ -65,11 +76,74 @@ def _template_seed(settings, template: str) -> tuple[dict, str]:
     return frontmatter.read(path)
 
 
+def _calendar_response(request: Request, conn, user, info: dict[str, str]):
+    """Month grid of events and project milestones (/calendario)."""
+    today = datetime.now().date()
+    year, month = parse_month(request.query_params.get("m", ""), today)
+    items_by_day = day_map(conn)
+    weeks = [
+        [
+            {
+                "date": day,
+                "iso": day.isoformat(),
+                "in_month": day.month == month,
+                "is_today": day == today,
+                "items": items_by_day.get(day, []),
+            }
+            for day in week
+        ]
+        for week in month_grid(year, month)
+    ]
+    prev_m = (datetime(year, month, 1) - timedelta(days=1)).strftime("%Y-%m")
+    next_m = (datetime(year, month, 28) + timedelta(days=7)).strftime("%Y-%m")
+    return templates.TemplateResponse(
+        request,
+        "calendar.html",
+        base_ctx(
+            request,
+            conn,
+            user,
+            collection_slug="calendario",
+            collection_label=info["label"],
+            weeks=weeks,
+            weekdays=WEEKDAYS_ES,
+            month_title=month_label(year, month),
+            prev_month=prev_m,
+            next_month=next_m,
+            feed_url=f"{request.base_url}calendario.ics",
+        ),
+    )
+
+
+def _date_span(meta: dict) -> str:
+    """Compact 'start → due' label for list rows and cards (projects)."""
+    start = parse_when(meta.get("start"))
+    due = parse_when(meta.get("due"))
+    if start is None and due is None:
+        return ""
+    start_s = start.strftime("%Y-%m-%d") if start else ""
+    due_s = due.strftime("%Y-%m-%d") if due else ""
+    if start_s and due_s:
+        return f"{start_s} → {due_s}"
+    return start_s or due_s
+
+
+@router.get("/calendario.ics")
+async def calendar_ics(request: Request, conn: ConnDep, user: UserDep):
+    """ICS feed of all dated events; subscribable from Google Calendar."""
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    ics = build_ics(conn, datetime.now(UTC).replace(microsecond=0))
+    return Response(content=ics, media_type="text/calendar; charset=utf-8")
+
+
 @router.get("/{collection}")
 async def collection_index(collection: str, request: Request, conn: ConnDep, user: UserDep):
     info = _collection_or_404(collection)
     if user is None:
         return RedirectResponse("/login", status_code=303)
+    if collection == "calendario":
+        return _calendar_response(request, conn, user, info)
     # Per-user list/grid choice: a valid ?vista= param wins and is
     # remembered in a cookie; otherwise the cookie (or "lista") applies.
     vista = request.query_params.get("vista", "")
@@ -85,6 +159,7 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
             "title": row["title"],
             "indexed_at": row["indexed_at"],
             "icon": json.loads(row["meta_json"] or "{}").get("icon"),
+            "dates": _date_span(json.loads(row["meta_json"] or "{}")),
         }
         for row in list_collection(conn, collection)
     ]
@@ -122,6 +197,7 @@ async def new_page_form(collection: str, request: Request, conn: ConnDep, user: 
             user,
             collection_slug=collection,
             collection_label=info["label"],
+            fecha=request.query_params.get("fecha", ""),
         ),
     )
 
@@ -134,6 +210,9 @@ async def create_page(
     user: UserDep,
     title: str = Form(...),
     body: str = Form(""),
+    start: str = Form(""),
+    end: str = Form(""),
+    location: str = Form(""),
 ):
     _collection_or_404(collection)
     settings = get_settings(request)
@@ -150,6 +229,20 @@ async def create_page(
         meta["name"] = title
     if "title" not in meta and "name" not in meta:
         meta["title"] = title
+
+    # Calendar events carry scheduling fields; end defaults to start.
+    if collection == "calendario":
+        start_dt = parse_when(start)
+        if start.strip() and start_dt is None:
+            raise HTTPException(status_code=400, detail="Fecha de inicio inválida")
+        end_dt = parse_when(end) if end.strip() else start_dt
+        if end.strip() and end_dt is None:
+            raise HTTPException(status_code=400, detail="Fecha de fin inválida")
+        if start_dt is not None:
+            meta["start"] = fmt_when(start_dt)
+            meta["end"] = fmt_when(end_dt or start_dt)
+        if location.strip():
+            meta["location"] = location.strip()
 
     page_path = _slugify(title)
     if collection == "projects":

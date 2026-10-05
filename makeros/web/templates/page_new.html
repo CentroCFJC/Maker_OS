@@ -10,6 +10,20 @@
   <label>Título
     <input type="text" name="title" required autofocus placeholder="Título de la página">
   </label>
+  {% if collection_slug == "calendario" %}
+  <div class="form-row">
+    <label>Inicio
+      <input type="text" name="start" value="{{ fecha }}"
+             placeholder="AAAA-MM-DD o AAAA-MM-DD HH:MM">
+    </label>
+    <label>Fin
+      <input type="text" name="end" placeholder="Igual que el inicio si se omite">
+    </label>
+    <label>Lugar
+      <input type="text" name="location" placeholder="Sala CAUCE, online…">
+    </label>
+  </div>
+  {% endif %}
   <label>Contenido inicial (Markdown, opcional)
     <textarea name="body" rows="8" placeholder="Puedes dejarlo vacío y usar bloques después."></textarea>
   </label>

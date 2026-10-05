@@ -1,12 +1,16 @@
 ---
-name: "Exhibición CAUCE"
-status: active
 lead: jacob
-members: [jacob]
-start: 2026-09-01
+members:
+- jacob
+name: Exhibición CAUCE
 repo: []
-tags: [exhibit, cauce]
+start: 2026-09-01
+status: active
+tags:
+- exhibit
+- cauce
 ---
+
 # Exhibición CAUCE
 
 ## Objetivo

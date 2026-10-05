@@ -32,7 +32,7 @@ def index_file(conn: sqlite3.Connection, content_dir: Path, file_path: Path) -> 
     """Parse one file and upsert it into the index. Returns the doc id."""
     doc_id = _doc_id(content_dir, file_path)
     meta, body = frontmatter.read(file_path)
-    title = str(meta.get("title") or doc_id.rsplit("/", 1)[-1])
+    title = str(meta.get("title") or meta.get("name") or doc_id.rsplit("/", 1)[-1])
     conn.execute(
         """
         INSERT INTO documents (path, collection, title, body, meta_json, mtime)

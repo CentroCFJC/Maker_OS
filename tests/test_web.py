@@ -294,3 +294,153 @@ def test_collection_view_toggle(logged_in_client: TestClient):
     back = logged_in_client.get("/wiki?vista=lista")
     assert "item-list" in back.text
     assert "card-grid" not in back.text
+
+
+# ---------- Calendar ----------
+
+def _reindex(settings):
+    from makeros.db import connect
+    from makeros.indexer import reindex_all
+
+    conn = connect(settings.db_path)
+    reindex_all(conn, settings.content_dir)
+    conn.close()
+
+
+def _write(path, meta, body="Agenda."):
+    from makeros.frontmatter import write as fm_write
+
+    fm_write(path, meta, body)
+
+
+def test_calendar_view_shows_events_and_projects(logged_in_client: TestClient, settings):
+    from datetime import date, timedelta
+
+    day = date.today() + timedelta(days=3)
+    nxt = day + timedelta(days=1)
+    _write(
+        settings.content_dir / "calendario" / "taller.md",
+        {"title": "Taller de impresión", "start": f"{day.isoformat()} 16:00",
+         "end": f"{day.isoformat()} 18:00", "location": "Sala CAUCE"},
+    )
+    _write(
+        settings.content_dir / "projects" / "cauce" / "project.md",
+        {"name": "Exhibición CAUCE", "start": day.isoformat(), "due": nxt.isoformat()},
+        "Proyecto de exhibición.",
+    )
+    _reindex(settings)
+
+    month = day.strftime("%Y-%m")
+    response = logged_in_client.get(f"/calendario?m={month}")
+    assert response.status_code == 200
+    assert "Taller de impresión" in response.text
+    assert 'class="cal-chip event"' in response.text
+    assert 'class="cal-chip project"' in response.text
+    assert f"/calendario/nuevo?fecha={day.isoformat()}" in response.text
+    assert "calendario.ics" in response.text  # feed URL on the connect panel
+
+
+def test_calendar_requires_login(client: TestClient):
+    response = client.get("/calendario", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_ics_feed(logged_in_client: TestClient, settings):
+    from datetime import date, timedelta
+
+    day = date.today() + timedelta(days=2)
+    _write(
+        settings.content_dir / "calendario" / "cita.md",
+        {"title": "Cita con pausa, coma", "start": f"{day.isoformat()} 10:00",
+         "end": f"{day.isoformat()} 11:00", "location": "Sala"},
+    )
+    _write(
+        settings.content_dir / "calendario" / "dia-completo.md",
+        {"title": "Jornada de puertas abiertas", "start": day.isoformat(),
+         "end": day.isoformat()},
+    )
+    _reindex(settings)
+
+    response = logged_in_client.get("/calendario.ics")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/calendar")
+    text = response.text
+    assert text.startswith("BEGIN:VCALENDAR")
+    assert "SUMMARY:Cita con pausa\\, coma" in text
+    assert f"DTSTART:{day.strftime('%Y%m%d')}T100000" in text
+    assert "DTSTART;VALUE=DATE:" + day.strftime("%Y%m%d") in text
+    # All-day DTEND is exclusive (next day) per RFC 5545.
+    assert "DTEND;VALUE=DATE:" + (day + timedelta(days=1)).strftime("%Y%m%d") in text
+    assert text.rstrip().endswith("END:VCALENDAR")
+
+
+def test_create_event_with_dates(logged_in_client: TestClient, settings):
+    response = logged_in_client.post(
+        "/calendario/nuevo",
+        data={
+            "title": "Reunión de planificación",
+            "start": "2026-11-04 15:00",
+            "end": "2026-11-04 16:30",
+            "location": "Sala CAUCE",
+            "body": "Puntos del día.",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/calendario/reunion-de-planificacion"
+
+    from makeros import frontmatter
+
+    meta, body = frontmatter.read(
+        settings.content_dir / "calendario" / "reunion-de-planificacion.md"
+    )
+    assert meta["start"] == "2026-11-04 15:00"
+    assert meta["end"] == "2026-11-04 16:30"
+    assert meta["location"] == "Sala CAUCE"
+
+
+def test_create_event_defaults_end_to_start(logged_in_client: TestClient, settings):
+    logged_in_client.post("/calendario/nuevo", data={"title": "Puntual", "start": "2026-11-10"})
+    from makeros import frontmatter
+
+    meta, _ = frontmatter.read(settings.content_dir / "calendario" / "puntual.md")
+    assert meta["start"] == "2026-11-10"
+    assert meta["end"] == "2026-11-10"
+
+
+def test_create_event_rejects_bad_date(logged_in_client: TestClient):
+    response = logged_in_client.post(
+        "/calendario/nuevo", data={"title": "Roto", "start": "mañana"}
+    )
+    assert response.status_code == 400
+
+
+def test_new_event_form_prefills_date(logged_in_client: TestClient):
+    response = logged_in_client.get("/calendario/nuevo?fecha=2026-12-24")
+    assert response.status_code == 200
+    assert 'value="2026-12-24"' in response.text
+
+
+def test_project_dates_show_on_cards_and_list(logged_in_client: TestClient, settings):
+    _write(
+        settings.content_dir / "projects" / "farol" / "project.md",
+        {"name": "Farol de papel", "start": "2026-10-01", "due": "2026-10-20"},
+        "Proyecto.",
+    )
+    _reindex(settings)
+
+    cards = logged_in_client.get("/projects?vista=tarjetas")
+    assert "Farol de papel" in cards.text
+    assert "2026-10-01 → 2026-10-20" in cards.text
+
+    listing = logged_in_client.get("/projects")
+    assert "2026-10-01 → 2026-10-20" in listing.text
+
+
+def test_icon_picker_is_a_visual_grid(logged_in_client: TestClient):
+    response = logged_in_client.get("/wiki/inicio")
+    assert response.status_code == 200
+    assert 'class="icon-grid"' in response.text
+    assert 'name="icon" value="zap"' in response.text
+    assert "makerosFilterIcons" in response.text
