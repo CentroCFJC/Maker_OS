@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -49,6 +49,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, same_site="lax")
     app.state.settings = settings
 
+    # Mount /static before including routers: the generic collection route
+    # `/{collection}/{page_path:path}` would otherwise swallow /static/* URLs.
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
     for router in (
         home_routes.router,
         auth_routes.router,
@@ -56,8 +60,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         collection_routes.router,
     ):
         app.include_router(router)
-
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
@@ -72,7 +74,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"<p><a href='/'>Volver al inicio</a></p></main></body></html>",
                 status_code=exc.status_code,
             )
-        raise exc
+        # Anything else (e.g. a 400) keeps FastAPI's JSON behaviour;
+        # re-raising here would turn it into a 500.
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
     return app
 

@@ -5,15 +5,37 @@
   <p class="breadcrumb"><a href="/">Inicio</a> / {{ collection_label }}</p>
   <div class="page-header-row">
     <h1>{{ collection_label }}</h1>
-    {% if user and user["role"] != "viewer" %}
-    <a class="btn-primary" href="/{{ collection_slug }}/nuevo">+ Añadir</a>
-    {% endif %}
+    <div class="header-actions">
+      <nav class="view-toggle" aria-label="Vista">
+        <a class="view-option{% if vista != 'tarjetas' %} active{% endif %}"
+           href="/{{ collection_slug }}?vista=lista">Lista</a>
+        <a class="view-option{% if vista == 'tarjetas' %} active{% endif %}"
+           href="/{{ collection_slug }}?vista=tarjetas">Tarjetas</a>
+      </nav>
+      {% if user and user["role"] != "viewer" %}
+      <a class="btn-primary" href="/{{ collection_slug }}/nuevo">+ Añadir</a>
+      {% endif %}
+    </div>
   </div>
 </header>
 
+{% if vista == "tarjetas" %}
+<div class="card-grid">
+  {% for item in items %}
+  <a class="item-card" href="/{{ item["path"] }}">
+    <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("file", cls="icon icon-lg") }}</span>
+    <span class="card-title">{{ item["title"] or item["path"] }}</span>
+    <span class="card-meta">actualizado {{ item["indexed_at"] }}</span>
+  </a>
+  {% else %}
+  <p class="item-empty">Todavía no hay nada aquí. Añade la primera página con «+ Añadir».</p>
+  {% endfor %}
+</div>
+{% else %}
 <ul class="item-list">
   {% for item in items %}
   <li class="item-row">
+    <span class="row-icon">{{ icon(item["icon"]) }}</span>
     <a class="item-title" href="/{{ item["path"] }}">{{ item["title"] or item["path"] }}</a>
     <span class="item-meta">actualizado {{ item["indexed_at"] }}</span>
   </li>
@@ -21,4 +43,5 @@
   <li class="item-empty">Todavía no hay nada aquí. Añade la primera página con «+ Añadir».</li>
   {% endfor %}
 </ul>
+{% endif %}
 {% endblock %}

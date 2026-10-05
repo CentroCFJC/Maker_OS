@@ -228,3 +228,69 @@ def test_viewer_cannot_edit(logged_in_client: TestClient, settings):
         ).status_code
         == 403
     )
+
+
+def test_static_assets_are_served(client: TestClient):
+    # Regression: the /{collection}/{page_path:path} collection route used to
+    # shadow the /static mount and 404 every asset.
+    for asset in (
+        "/static/css/makeros.css",
+        "/static/vendor/htmx.min.js",
+        "/static/vendor/feather-sprite.svg",
+        "/static/img/logo.png",
+    ):
+        response = client.get(asset)
+        assert response.status_code == 200, asset
+
+
+def test_icon_registry_lists_sprite_symbols():
+    from makeros.web.icons import icon_names
+
+    names = icon_names()
+    assert "activity" in names
+    assert "zap" in names
+    assert names == tuple(sorted(set(names)))
+
+
+def test_page_icon_can_be_set_and_cleared(logged_in_client: TestClient, settings):
+    from makeros import frontmatter
+
+    response = logged_in_client.post(
+        "/wiki/inicio/icono", data={"icon": "zap"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    meta, _ = frontmatter.read(settings.content_dir / "wiki" / "inicio.md")
+    assert meta.get("icon") == "zap"
+
+    page = logged_in_client.get("/wiki/inicio")
+    assert "feather-sprite.svg#zap" in page.text
+
+    listing = logged_in_client.get("/wiki")
+    assert "feather-sprite.svg#zap" in listing.text
+
+    logged_in_client.post("/wiki/inicio/icono", data={"icon": ""})
+    meta, _ = frontmatter.read(settings.content_dir / "wiki" / "inicio.md")
+    assert "icon" not in meta
+
+
+def test_invalid_icon_rejected(logged_in_client: TestClient):
+    response = logged_in_client.post("/wiki/inicio/icono", data={"icon": "no-existe"})
+    assert response.status_code == 400
+
+
+def test_collection_view_toggle(logged_in_client: TestClient):
+    default = logged_in_client.get("/wiki")
+    assert "item-list" in default.text
+    assert "card-grid" not in default.text
+
+    grid = logged_in_client.get("/wiki?vista=tarjetas")
+    assert "card-grid" in grid.text
+    assert "vista=tarjetas" in grid.headers.get("set-cookie", "")
+
+    # The choice is remembered in the cookie.
+    remembered = logged_in_client.get("/wiki")
+    assert "card-grid" in remembered.text
+
+    back = logged_in_client.get("/wiki?vista=lista")
+    assert "item-list" in back.text
+    assert "card-grid" not in back.text

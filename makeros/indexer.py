@@ -87,7 +87,8 @@ def get_document(conn: sqlite3.Connection, doc_id: str) -> sqlite3.Row | None:
 
 def list_collection(conn: sqlite3.Connection, collection: str) -> list[sqlite3.Row]:
     return conn.execute(
-        "SELECT path, title, indexed_at FROM documents WHERE collection = ? ORDER BY title",
+        "SELECT path, title, indexed_at, meta_json FROM documents "
+        "WHERE collection = ? ORDER BY title",
         (collection,),
     ).fetchall()
 

@@ -8,6 +8,7 @@ through the frontmatter module and refresh the index immediately.
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from pathlib import Path
@@ -20,12 +21,14 @@ from ...collections import COLLECTIONS
 from ...indexer import index_file, list_collection, remove_document
 from ..blocks import BLOCK_SEEDS, join_blocks, split_blocks
 from ..deps import ConnDep, UserDep, base_ctx, get_settings
+from ..icons import icon_names, is_valid_icon
 from ..render import render_markdown
 from ..templates import templates
 
 router = APIRouter()
 
 EDIT_ROLES = ("admin", "member")
+VIEWS = ("lista", "tarjetas")
 
 
 def _collection_or_404(collection: str) -> dict[str, str]:
@@ -67,8 +70,25 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
     info = _collection_or_404(collection)
     if user is None:
         return RedirectResponse("/login", status_code=303)
-    items = list_collection(conn, collection)
-    return templates.TemplateResponse(
+    # Per-user list/grid choice: a valid ?vista= param wins and is
+    # remembered in a cookie; otherwise the cookie (or "lista") applies.
+    vista = request.query_params.get("vista", "")
+    if vista in VIEWS:
+        remember = vista
+    else:
+        vista = remember = None
+    if vista is None:
+        vista = request.cookies.get("vista", "lista")
+    items = [
+        {
+            "path": row["path"],
+            "title": row["title"],
+            "indexed_at": row["indexed_at"],
+            "icon": json.loads(row["meta_json"] or "{}").get("icon"),
+        }
+        for row in list_collection(conn, collection)
+    ]
+    response = templates.TemplateResponse(
         request,
         "list.html",
         base_ctx(
@@ -78,8 +98,12 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
             collection_slug=collection,
             collection_label=info["label"],
             items=items,
+            vista=vista,
         ),
     )
+    if remember is not None:
+        response.set_cookie("vista", remember)
+    return response
 
 
 @router.get("/{collection}/nuevo")
@@ -181,6 +205,7 @@ async def page_view(
             meta=meta,
             blocks=blocks,
             can_edit=user["role"] in EDIT_ROLES,
+            icon_list=icon_names(),
         ),
     )
 
@@ -337,6 +362,32 @@ async def add_block(
     position = len(texts) if despues == -1 else despues + 1
     texts.insert(position, BLOCK_SEEDS[tipo])
     _save_blocks(conn, settings, file, meta, texts)
+    return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
+
+
+@router.post("/{collection}/{page_path:path}/icono")
+async def set_icon(
+    collection: str,
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    icon: str = Form(""),
+):
+    """Set (or clear, when empty) the page's icon in its frontmatter."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    icon = icon.strip()
+    if icon and not is_valid_icon(icon):
+        raise HTTPException(status_code=400)
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, collection, page_path)
+    if icon:
+        meta["icon"] = icon
+    else:
+        meta.pop("icon", None)
+    frontmatter.write(file, meta, body)
+    index_file(conn, settings.content_dir, file)
     return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
 
 

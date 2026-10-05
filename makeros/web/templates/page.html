@@ -4,7 +4,19 @@
 <article class="notion-page">
   <header class="page-header">
     <p class="breadcrumb"><a href="/{{ collection_slug }}">{{ collection_label }}</a> / {{ title }}</p>
-    <h1>{{ title }}</h1>
+    <h1 class="page-title-with-icon">{{ icon(meta.get("icon"), cls="icon icon-title") }}<span>{{ title }}</span></h1>
+    {% if can_edit %}
+    <form method="post" action="{{ page_url }}/icono" class="icon-picker">
+      <label class="icon-picker-label" for="icono">{{ icon(meta.get("icon")) }} Icono de la página</label>
+      <select name="icon" id="icono" onchange="this.form.submit()">
+        <option value="" {% if not meta.get("icon") %}selected{% endif %}>(sin icono)</option>
+        {% for name in icon_list %}
+        <option value="{{ name }}" {% if meta.get("icon") == name %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button type="submit" class="btn-ghost">Guardar</button></noscript>
+    </form>
+    {% endif %}
     {% if meta.get("tags") %}
     <p class="tags">
       {% for tag in meta.get("tags", []) %}<span class="tag">{{ tag }}</span>{% endfor %}

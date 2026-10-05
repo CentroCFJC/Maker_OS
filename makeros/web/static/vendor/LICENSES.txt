@@ -1,0 +1,4 @@
+Vendored third-party assets (served from this directory, no CDN).
+
+htmx.min.js — htmx 2.x, BSD 0-Clause license — https://htmx.org
+feather-sprite.svg — Feather Icons 4.29.2, MIT license — https://feathericons.com
