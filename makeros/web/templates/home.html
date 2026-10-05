@@ -32,6 +32,7 @@
   <div class="card-grid">
     {% for item in projects %}
     <a class="item-card project-card" href="/{{ item["path"] }}">
+      {% if item["banner"] %}<span class="card-banner" style="background-image: url('{{ item["banner"] }}')"></span>{% endif %}
       <div class="card-head">
         <span class="card-icon">{{ icon(item["icon"], cls="icon icon-lg") or icon("layers", cls="icon icon-lg") }}</span>
         {% if item["status"] in status_labels %}

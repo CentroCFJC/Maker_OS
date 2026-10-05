@@ -65,10 +65,23 @@ Phases delivered:
   classes. Content column is full-width (readability cap only on
   long-form `.blocks`). Listing helpers shared by dashboard and index
   pages live in `makeros/web/listing.py`.
+- **Rich blocks + banners** — done. Block menu (Obsidian-like): 12
+  types incl. tabla, callout (`> [!INFO]`, `[!WARNING]`…), imagen,
+  divisor, lista numerada; "/" slash menu inside the editor textarea
+  (`data-slash-input` + makeros.js). GFM `table`/`strikethrough`
+  enabled in render.py (tables never rendered before). Page banners
+  (Notion covers): `banner` frontmatter (URL or `/media/...`),
+  upload endpoint stores in `content/_uploads/` (png/jpg/webp/gif,
+  5 MB max), served via login-gated `GET /media/{path}`; banners show
+  on page + cards. Card-size slider scales cards proportionally
+  (`--card-min` + `--card-scale`). IMPORTANT route-order fix:
+  `page_view` (catch-all `/{collection}/{page_path:path}`) must stay
+  registered LAST in its router — it shadowed the block GET routes
+  (inline edit forms 404'd) until it was moved.
 
-Verification state: **73 pytest tests passing, ruff clean**; new flows
-smoke-tested over HTTP (dashboard sections, filter chips, badges,
-sidebar sections).
+Verification state: **81 pytest tests passing, ruff clean**; new flows
+smoke-tested over HTTP (tables, callouts, slash menu, banner upload +
+media serving, inline edit form GET).
 
 Git: commits on `main` per feature. No remote configured yet.
 
@@ -113,7 +126,7 @@ cd /home/jacob/Downloads/Dev/MakerOS
 make setup                    # venv + editable install with dev deps
 make user u=jacob r=admin     # prompts password (getpass)
 make run                      # http://localhost:8000
-make test                     # pytest (73 tests)
+make test                     # pytest (81 tests)
 make lint                     # ruff
 # Docker: cp .env.example .env (set MAKEROS_SECRET_KEY) && make docker-up
 ```

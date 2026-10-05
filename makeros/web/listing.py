@@ -41,6 +41,7 @@ def collection_items(conn: sqlite3.Connection, collection: str) -> list[dict]:
                 "dates": date_span(meta),
                 "status": str(meta.get("status") or ""),
                 "project": str(meta.get("project") or ""),
+                "banner": str(meta.get("banner") or ""),
             }
         )
     return items

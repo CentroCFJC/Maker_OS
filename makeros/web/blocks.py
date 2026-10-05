@@ -11,25 +11,51 @@ from __future__ import annotations
 import re
 from typing import NamedTuple
 
+# Ordered block menu (the "/ menu" in the editor and the add menu).
+# icon = name in the vendored Feather sprite.
 BLOCK_TYPES: dict[str, str] = {
     "parrafo": "Párrafo",
     "titulo": "Título",
+    "subtitulo": "Subtítulo",
     "lista": "Lista",
+    "lista-numerada": "Lista numerada",
     "checklist": "Lista de tareas",
     "tabla": "Tabla",
     "codigo": "Código",
     "cita": "Cita",
+    "callout": "Aviso destacado",
+    "imagen": "Imagen",
+    "divisor": "Divisor",
+}
+BLOCK_ICONS: dict[str, str] = {
+    "parrafo": "type",
+    "titulo": "hash",
+    "subtitulo": "align-left",
+    "lista": "list",
+    "lista-numerada": "chevron-right",
+    "checklist": "check-square",
+    "tabla": "grid",
+    "codigo": "code",
+    "cita": "message-square",
+    "callout": "info",
+    "imagen": "image",
+    "divisor": "minus",
 }
 
 # Markdown seed inserted when adding a block of the given type.
 BLOCK_SEEDS: dict[str, str] = {
     "parrafo": "Escribe aquí…",
     "titulo": "# Título",
+    "subtitulo": "## Subtítulo",
     "lista": "- Elemento",
+    "lista-numerada": "1. Primer paso",
     "checklist": "- [ ] Tarea",
     "tabla": "| Columna 1 | Columna 2 |\n|---|---|\n|  |  |",
     "codigo": "```\ncódigo\n```",
     "cita": "> Cita",
+    "callout": "> [!INFO] Título del aviso\n> Texto del aviso.",
+    "imagen": "![Descripción de la imagen](https://…)",
+    "divisor": "---",
 }
 
 
@@ -43,12 +69,16 @@ def infer_kind(text: str) -> str:
     stripped = text.strip()
     if stripped.startswith("```"):
         return "codigo"
+    if re.match(r"^>\s*\[!", stripped):
+        return "callout"
     if stripped.startswith("#"):
         return "titulo"
     if stripped.startswith("|"):
         return "tabla"
     if stripped.startswith(">"):
         return "cita"
+    if re.match(r"^!\[", stripped):
+        return "imagen"
     if re.match(r"^[-*+]\s\[", stripped):
         return "checklist"
     if re.match(r"^([-*+]|\d+\.)\s", stripped):

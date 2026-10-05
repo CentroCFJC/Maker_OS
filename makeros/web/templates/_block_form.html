@@ -1,7 +1,19 @@
 <div class="block block-editing" id="block-{{ i }}">
   <form hx-post="{{ page_url }}/bloques/{{ i }}/editar"
         hx-target="#block-{{ i }}" hx-swap="outerHTML" class="block-form">
-    <textarea name="text" rows="6" autofocus>{{ text }}</textarea>
+    <div class="slash-wrap">
+      <textarea name="text" rows="6" autofocus
+                data-slash-input>{{ text }}</textarea>
+      <div class="slash-menu" data-slash-menu hidden>
+        <p class="slash-hint">Bloques — escribe para filtrar, Esc para cerrar</p>
+        {% for tipo, label in block_types.items() %}
+        <button type="button" class="slash-item" data-tipo="{{ tipo }}"
+                data-seed="{{ block_seeds[tipo] | tojson }}">
+          {{ icon(block_icons.get(tipo), cls="icon") }}<span>{{ label }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
     <div class="block-form-actions">
       <button type="submit" class="btn-primary">Guardar</button>
       <button type="button" class="btn-ghost"

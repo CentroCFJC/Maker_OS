@@ -590,3 +590,110 @@ def test_sidebar_para_hoy_shows_todays_events(logged_in_client: TestClient, sett
     response = logged_in_client.get("/")
     assert "Para hoy" in response.text
     assert "Reunión de hoy" in response.text
+
+
+# ---------- Rich blocks + slash menu ----------
+
+def test_add_menu_lists_all_block_types(logged_in_client: TestClient):
+    page = logged_in_client.get("/wiki/inicio")
+    for label in ("Tabla", "Aviso destacado", "Imagen", "Divisor",
+                   "Lista numerada", "Subtítulo"):
+        assert label in page.text
+
+
+def test_block_editor_has_slash_menu(logged_in_client: TestClient):
+    response = logged_in_client.get("/wiki/inicio/bloques/0/editar")
+    assert response.status_code == 200
+    assert "data-slash-input" in response.text
+    assert "data-slash-menu" in response.text
+    assert 'data-tipo="tabla"' in response.text
+    assert 'data-tipo="callout"' in response.text
+
+
+def test_add_each_new_block_type(logged_in_client: TestClient, settings):
+    for tipo in ("subtitulo", "lista-numerada", "divisor", "imagen", "callout", "tabla"):
+        response = logged_in_client.post(
+            "/wiki/inicio/bloques/nuevo", data={"tipo": tipo}, follow_redirects=False
+        )
+        assert response.status_code == 303
+    page = logged_in_client.get("/wiki/inicio")
+    assert "<hr" in page.text                        # divisor
+    assert 'class="callout callout-info"' in page.text
+    assert "<table>" in page.text                    # tabla
+
+
+def test_callout_rendering(logged_in_client: TestClient, settings):
+    from makeros.web.render import render_markdown
+
+    html = render_markdown("> [!WARNING] Cuidado\n> Pilas calientes.")
+    assert 'class="callout callout-warning"' in html
+    assert "Cuidado" in html
+    assert "Pilas calientes." in html
+
+
+def test_banner_upload_and_media(logged_in_client: TestClient, settings):
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32  # minimal stub, format checked by ext
+    response = logged_in_client.post(
+        "/wiki/inicio/banner",
+        files={"archivo": ("portada.png", png, "image/png")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from makeros import frontmatter
+
+    meta, _ = frontmatter.read(settings.content_dir / "wiki" / "inicio.md")
+    assert meta["banner"].startswith("/media/")
+    assert meta["banner"].endswith(".png")
+    uploads = settings.content_dir / "_uploads"
+    assert list(uploads.glob("inicio-*.png"))
+
+    page = logged_in_client.get("/wiki/inicio")
+    assert "page-banner" in page.text
+    assert "background-image" in page.text
+
+    media = logged_in_client.get(meta["banner"])
+    assert media.status_code == 200
+    assert media.content == png
+
+    # Anonymous users cannot read media files.
+    logged_in_client.post("/logout")
+    assert logged_in_client.get(meta["banner"], follow_redirects=False).status_code == 303
+
+
+def test_banner_from_url_and_removal(logged_in_client: TestClient, settings):
+    from makeros import frontmatter
+
+    response = logged_in_client.post(
+        "/wiki/inicio/banner",
+        data={"url": "https://example.com/portada.jpg"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    meta, _ = frontmatter.read(settings.content_dir / "wiki" / "inicio.md")
+    assert meta["banner"] == "https://example.com/portada.jpg"
+
+    logged_in_client.post("/wiki/inicio/banner/borrar")
+    meta, _ = frontmatter.read(settings.content_dir / "wiki" / "inicio.md")
+    assert "banner" not in meta
+
+
+def test_banner_rejects_bad_input(logged_in_client: TestClient):
+    bad_url = logged_in_client.post("/wiki/inicio/banner", data={"url": "javascript:alert(1)"})
+    assert bad_url.status_code == 400
+    nothing = logged_in_client.post("/wiki/inicio/banner", data={})
+    assert nothing.status_code == 400
+    bad_ext = logged_in_client.post(
+        "/wiki/inicio/banner", files={"archivo": ("mal.txt", b"x", "text/plain")}
+    )
+    assert bad_ext.status_code == 400
+
+
+def test_banner_shows_on_cards(logged_in_client: TestClient, settings):
+    logged_in_client.post(
+        "/wiki/inicio/banner",
+        data={"url": "https://example.com/x.png"},
+        follow_redirects=False,
+    )
+    cards = logged_in_client.get("/wiki?vista=tarjetas")
+    assert "card-banner" in cards.text
+    assert "https://example.com/x.png" in cards.text

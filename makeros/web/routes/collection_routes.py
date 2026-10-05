@@ -9,12 +9,14 @@ through the frontmatter module and refresh the index immediately.
 from __future__ import annotations
 
 import re
+import secrets
 import unicodedata
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from ... import frontmatter
 from ...collections import COLLECTIONS, STATUS_FILTERS
@@ -41,6 +43,26 @@ router = APIRouter()
 
 EDIT_ROLES = ("admin", "member")
 VIEWS = ("lista", "tarjetas")
+
+# Page banners: uploaded files land in content/_uploads/ and are served
+# back through /media/. Banners may also be plain remote URLs.
+UPLOAD_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+MAX_BANNER_BYTES = 5 * 1024 * 1024
+
+
+def _uploads_dir(settings) -> Path:
+    uploads = settings.content_dir / "_uploads"
+    uploads.mkdir(parents=True, exist_ok=True)
+    return uploads
+
+
+def _safe_upload_path(settings, name: str) -> Path | None:
+    """Resolve a /media/ name inside the uploads dir, blocking traversal."""
+    uploads = _uploads_dir(settings).resolve()
+    target = (uploads / name).resolve()
+    if target == uploads or uploads not in target.parents:
+        return None
+    return target
 
 
 def _collection_or_404(collection: str) -> dict[str, str]:
@@ -144,6 +166,81 @@ async def calendar_ics(request: Request, conn: ConnDep, user: UserDep):
         return RedirectResponse("/login", status_code=303)
     ics = build_ics(conn, datetime.now(UTC).replace(microsecond=0))
     return Response(content=ics, media_type="text/calendar; charset=utf-8")
+
+
+@router.get("/media/{file_path:path}")
+async def media_file(file_path: str, request: Request, user: UserDep):
+    """Serve uploaded page banners (login required)."""
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    settings = get_settings(request)
+    target = _safe_upload_path(settings, file_path)
+    if target is None or not target.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(target)
+
+
+@router.post("/{collection}/{page_path:path}/banner")
+async def set_banner(
+    collection: str,
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    archivo: Annotated[UploadFile | None, File()] = None,
+    url: str = Form(""),
+):
+    """Set a page banner: upload a file or paste an image URL."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, collection, page_path)
+
+    if archivo is not None and archivo.filename:
+        ext = Path(archivo.filename).suffix.lower().lstrip(".")
+        if ext not in UPLOAD_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Formato de imagen no permitido")
+        data = await archivo.read()
+        if len(data) > MAX_BANNER_BYTES:
+            raise HTTPException(status_code=400, detail="La imagen supera 5 MB")
+        stem = re.sub(r"[^a-z0-9]+", "-", page_path.lower()).strip("-") or "pagina"
+        name = f"{stem}-{secrets.token_hex(4)}.{ext}"
+        (_uploads_dir(settings) / name).write_bytes(data)
+        meta["banner"] = f"/media/{name}"
+    elif url.strip():
+        url = url.strip()
+        if not url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="La URL debe empezar por http(s)://")
+        meta["banner"] = url
+    else:
+        raise HTTPException(status_code=400, detail="Sube un archivo o pega una URL")
+
+    frontmatter.write(file, meta, body)
+    index_file(conn, settings.content_dir, file)
+    return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
+
+
+@router.post("/{collection}/{page_path:path}/banner/borrar")
+async def delete_banner(
+    collection: str,
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+):
+    """Remove a page banner (and its uploaded file, if any)."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, collection, page_path)
+    banner = meta.pop("banner", None)
+    if banner and banner.startswith("/media/"):
+        target = _safe_upload_path(settings, banner[len("/media/"):])
+        if target is not None and target.is_file():
+            target.unlink()
+    frontmatter.write(file, meta, body)
+    index_file(conn, settings.content_dir, file)
+    return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
 
 
 @router.get("/{collection}")
@@ -267,47 +364,6 @@ async def create_page(
     frontmatter.write(file, meta, body.strip() or seed_body)
     index_file(conn, settings.content_dir, file)
     return RedirectResponse(f"/{collection}/{candidate}", status_code=303)
-
-
-@router.get("/{collection}/{page_path:path}")
-async def page_view(
-    collection: str,
-    page_path: str,
-    request: Request,
-    conn: ConnDep,
-    user: UserDep,
-):
-    info = _collection_or_404(collection)
-    if user is None:
-        return RedirectResponse("/login", status_code=303)
-    settings = get_settings(request)
-    file, _doc_id = _resolve_page(settings, collection, page_path)
-    if not file.is_file():
-        raise HTTPException(status_code=404)
-
-    meta, body = frontmatter.read(file)
-    blocks = [
-        {"i": b.index, "kind": b.kind, "html": render_markdown(b.text)}
-        for b in split_blocks(body)
-    ]
-    title = str(meta.get("title") or meta.get("name") or page_path.rsplit("/", 1)[-1])
-    return templates.TemplateResponse(
-        request,
-        "page.html",
-        base_ctx(
-            request,
-            conn,
-            user,
-            collection_slug=collection,
-            collection_label=info["label"],
-            page_path=page_path,
-            page_url=f"/{collection}/{page_path}",
-            title=title,
-            meta=meta,
-            blocks=blocks,
-            can_edit=user["role"] in EDIT_ROLES,
-        ),
-    )
 
 
 def _load_for_edit(settings, collection: str, page_path: str) -> tuple[Path, dict, str]:
@@ -508,3 +564,47 @@ async def delete_page(
     file.unlink()
     remove_document(conn, doc_id)
     return RedirectResponse(f"/{collection}", status_code=303)
+
+
+# The catch-all page view must be registered LAST: the block/banner
+# routes below it in the URL space would otherwise be shadowed by its
+# {page_path:path} converter (first match wins in Starlette).
+@router.get("/{collection}/{page_path:path}")
+async def page_view(
+    collection: str,
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+):
+    info = _collection_or_404(collection)
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    settings = get_settings(request)
+    file, _doc_id = _resolve_page(settings, collection, page_path)
+    if not file.is_file():
+        raise HTTPException(status_code=404)
+
+    meta, body = frontmatter.read(file)
+    blocks = [
+        {"i": b.index, "kind": b.kind, "html": render_markdown(b.text)}
+        for b in split_blocks(body)
+    ]
+    title = str(meta.get("title") or meta.get("name") or page_path.rsplit("/", 1)[-1])
+    return templates.TemplateResponse(
+        request,
+        "page.html",
+        base_ctx(
+            request,
+            conn,
+            user,
+            collection_slug=collection,
+            collection_label=info["label"],
+            page_path=page_path,
+            page_url=f"/{collection}/{page_path}",
+            title=title,
+            meta=meta,
+            blocks=blocks,
+            can_edit=user["role"] in EDIT_ROLES,
+        ),
+    )

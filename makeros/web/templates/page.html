@@ -2,6 +2,36 @@
 {% block title %}MakerOS — {{ title }}{% endblock %}
 {% block content %}
 <article class="notion-page">
+  {% if meta.get("banner") or can_edit %}
+  <div class="page-banner"{% if meta.get("banner") %} style="background-image: url('{{ meta["banner"] }}')"{% endif %}>
+    {% if not meta.get("banner") %}<span class="page-banner-empty">Sin portada todavía</span>{% endif %}
+    {% if can_edit %}
+    <details class="banner-menu">
+      <summary>Cambiar portada</summary>
+      <div class="banner-menu-panel">
+        <form method="post" action="{{ page_url }}/banner"
+              enctype="multipart/form-data" class="banner-form">
+          <label>Subir del equipo
+            <input type="file" name="archivo" accept="image/png,image/jpeg,image/webp,image/gif">
+          </label>
+          <button type="submit" class="btn-primary">Subir</button>
+        </form>
+        <form method="post" action="{{ page_url }}/banner" class="banner-form">
+          <label>Pegar URL de imagen
+            <input type="url" name="url" placeholder="https://…">
+          </label>
+          <button type="submit" class="btn-primary">Usar URL</button>
+        </form>
+        {% if meta.get("banner") %}
+        <form method="post" action="{{ page_url }}/banner/borrar" class="banner-form">
+          <button type="submit" class="btn-danger-ghost">Quitar portada</button>
+        </form>
+        {% endif %}
+      </div>
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
   <header class="page-header">
     <p class="breadcrumb"><a href="/{{ collection_slug }}">{{ collection_label }}</a> / {{ title }}</p>
     <h1 class="page-title-with-icon">{{ icon(meta.get("icon"), cls="icon icon-title") }}<span>{{ title }}</span></h1>
