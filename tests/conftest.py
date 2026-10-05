@@ -36,6 +36,7 @@ def settings(tmp_path: Path, content_dir: Path) -> Settings:
     return Settings(
         content_dir=content_dir,
         private_dir=tmp_path / "private",
+        templates_dir=tmp_path / "templates",
         db_path=tmp_path / "data" / "makeros.db",
         secret_key="test-secret",
     )

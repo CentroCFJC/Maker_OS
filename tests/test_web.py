@@ -92,3 +92,139 @@ def test_raw_html_in_markdown_is_escaped(logged_in_client: TestClient, settings)
     assert page.status_code == 200
     assert "<script>alert(1)</script>" not in page.text
     assert "&lt;script&gt;" in page.text
+
+
+# --- Links, categories, creation and blocks ------------------------------
+
+
+def test_links_use_doc_paths_not_double_prefix(logged_in_client: TestClient):
+    # Documents are linked as "/<doc path>", never "/wiki/<doc path>".
+    home = logged_in_client.get("/")
+    assert 'href="/wiki/inicio"' in home.text
+    wiki_index = logged_in_client.get("/wiki")
+    assert 'href="/wiki/inicio"' in wiki_index.text
+    search = logged_in_client.get("/search", params={"q": "laboratorio"})
+    assert 'href="/wiki/guia-del-sistema"' in search.text
+
+
+def test_unknown_collection_404(logged_in_client: TestClient):
+    assert logged_in_client.get("/cosas").status_code == 404
+
+
+def test_wiki_page_via_generic_route(logged_in_client: TestClient):
+    response = logged_in_client.get("/wiki/inicio")
+    assert response.status_code == 200
+    assert "<h1>Bienvenido</h1>" in response.text
+
+
+def test_create_page(logged_in_client: TestClient, settings):
+    response = logged_in_client.post(
+        "/wiki/nuevo", data={"title": "Nueva Página Rara"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/wiki/nueva-pagina-rara"
+
+    file = settings.content_dir / "wiki" / "nueva-pagina-rara.md"
+    assert file.is_file()
+    page = logged_in_client.get("/wiki/nueva-pagina-rara")
+    assert page.status_code == 200
+    assert "Nueva Página Rara" in page.text
+
+
+def test_create_page_slug_collision(logged_in_client: TestClient, settings):
+    for _ in range(2):
+        response = logged_in_client.post(
+            "/wiki/nuevo", data={"title": "Duplicada"}, follow_redirects=False
+        )
+    assert response.headers["location"] == "/wiki/duplicada-2"
+    assert (settings.content_dir / "wiki" / "duplicada-2.md").is_file()
+
+
+def test_create_project_uses_directory(logged_in_client: TestClient, settings):
+    response = logged_in_client.post(
+        "/projects/nuevo", data={"title": "Proyecto Prueba"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/projects/proyecto-prueba/project"
+    assert (settings.content_dir / "projects" / "proyecto-prueba" / "project.md").is_file()
+
+
+def test_block_add_and_edit_and_delete(logged_in_client: TestClient, settings):
+    from makeros.frontmatter import read
+
+    page_url = "/wiki/inicio"
+
+    # Add a paragraph block at the end.
+    response = logged_in_client.post(
+        f"{page_url}/bloques/nuevo",
+        data={"tipo": "parrafo", "despues": -1},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    _meta, body = read(settings.content_dir / "wiki" / "inicio.md")
+    assert "Escribe aquí…" in body
+
+    # Edit the first block (the heading).
+    response = logged_in_client.post(
+        f"{page_url}/bloques/0/editar",
+        data={"text": "# Título editado"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    _meta, body = read(settings.content_dir / "wiki" / "inicio.md")
+    assert body.startswith("# Título editado")
+    assert "Bienvenido" not in body
+
+    # Delete the seed block we just added (now index 2).
+    response = logged_in_client.post(
+        f"{page_url}/bloques/2/borrar", follow_redirects=False
+    )
+    assert response.status_code == 303
+    _meta, body = read(settings.content_dir / "wiki" / "inicio.md")
+    assert "Escribe aquí…" not in body
+
+
+def test_block_edit_htmx_returns_partial(logged_in_client: TestClient):
+    response = logged_in_client.post(
+        "/wiki/inicio/bloques/0/editar",
+        data={"text": "# Vía htmx"},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    assert 'id="block-0"' in response.text
+    assert "<h1>Vía htmx</h1>" in response.text
+    # No full page shell in a partial swap.
+    assert "<aside" not in response.text
+
+
+def test_delete_page(logged_in_client: TestClient, settings):
+    logged_in_client.post("/wiki/nuevo", data={"title": "Borrable"})
+    response = logged_in_client.post("/wiki/borrable/borrar", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/wiki"
+    assert not (settings.content_dir / "wiki" / "borrable.md").exists()
+
+
+def test_viewer_cannot_edit(logged_in_client: TestClient, settings):
+    from makeros import auth
+    from makeros.db import connect, init_schema
+
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    auth.create_user(conn, "mirón", "clave123", role="viewer")
+    conn.close()
+
+    logged_in_client.post("/logout")
+    logged_in_client.post("/login", data={"username": "mirón", "password": "clave123"})
+
+    # Read access works, edit buttons hidden, write endpoints rejected.
+    assert logged_in_client.get("/wiki/inicio").status_code == 200
+    page = logged_in_client.get("/wiki/inicio")
+    assert "Editar" not in page.text
+    assert logged_in_client.get("/wiki/nuevo").status_code == 403
+    assert (
+        logged_in_client.post(
+            "/wiki/inicio/bloques/nuevo", data={"tipo": "parrafo"}
+        ).status_code
+        == 403
+    )

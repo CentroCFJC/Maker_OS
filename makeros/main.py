@@ -15,7 +15,7 @@ from .auth import count_users
 from .config import Settings
 from .db import connect, init_schema
 from .indexer import Watcher, reindex_all
-from .web.routes import auth_routes, home_routes, search_routes, wiki_routes
+from .web.routes import auth_routes, collection_routes, home_routes, search_routes
 
 log = logging.getLogger("makeros")
 
@@ -52,8 +52,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     for router in (
         home_routes.router,
         auth_routes.router,
-        wiki_routes.router,
         search_routes.router,
+        collection_routes.router,
     ):
         app.include_router(router)
 

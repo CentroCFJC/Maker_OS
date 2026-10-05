@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from ...indexer import search_documents
-from ..deps import ConnDep, UserDep
+from ..deps import ConnDep, UserDep, base_ctx
 from ..templates import templates
 
 router = APIRouter()
@@ -18,5 +18,5 @@ async def search(request: Request, conn: ConnDep, user: UserDep, q: str = ""):
         return RedirectResponse("/login", status_code=303)
     results = search_documents(conn, q) if q.strip() else []
     return templates.TemplateResponse(
-        request, "search.html", {"user": user, "q": q, "results": results}
+        request, "search.html", base_ctx(request, conn, user, q=q, results=results)
     )

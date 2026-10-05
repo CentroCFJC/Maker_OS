@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — {{ collection_label }}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / {{ collection_label }}</p>
+  <div class="page-header-row">
+    <h1>{{ collection_label }}</h1>
+    {% if user and user["role"] != "viewer" %}
+    <a class="btn-primary" href="/{{ collection_slug }}/nuevo">+ Añadir</a>
+    {% endif %}
+  </div>
+</header>
+
+<ul class="item-list">
+  {% for item in items %}
+  <li class="item-row">
+    <a class="item-title" href="/{{ item["path"] }}">{{ item["title"] or item["path"] }}</a>
+    <span class="item-meta">actualizado {{ item["indexed_at"] }}</span>
+  </li>
+  {% else %}
+  <li class="item-empty">Todavía no hay nada aquí. Añade la primera página con «+ Añadir».</li>
+  {% endfor %}
+</ul>
+{% endblock %}

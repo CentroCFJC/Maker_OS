@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Request
 
 from ..auth import get_user
+from ..collections import COLLECTIONS
 from ..config import Settings
 from ..db import connect
+from ..indexer import collection_counts
 
 
 def get_settings(request: Request) -> Settings:
@@ -40,3 +42,13 @@ async def current_user(request: Request, conn: ConnDep):
 
 
 UserDep = Annotated[sqlite3.Row | None, Depends(current_user)]
+
+
+def base_ctx(
+    request: Request, conn: sqlite3.Connection, user: sqlite3.Row | None, **extra: Any
+) -> dict[str, Any]:
+    """Common template context: user, collection nav with live counts."""
+    counts = {row["collection"]: row["n"] for row in collection_counts(conn)}
+    ctx: dict[str, Any] = {"user": user, "counts": counts, "collections": COLLECTIONS}
+    ctx.update(extra)
+    return ctx

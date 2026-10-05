@@ -63,6 +63,7 @@ MakerOS is a **standalone, self-hosted, from-scratch web application** for the C
 ### 2.7 Knowledge Wiki
 - Free-form Markdown pages under `content/wiki/`, hierarchical, full-text search, backlinks.
 - Templates: `device-doc`, `project-postmortem`, `howto`, `meeting-notes`.
+- **Notion-style block UI (platform-wide):** every page is edited as a list of blocks (heading, paragraph, list, checklist, table, code, quote). Blocks map 1:1 to Markdown chunks; add/edit/delete writes back through the frontmatter module, so the file stays the source of truth. Category navigation lives in a sidebar; each category has an "+ Añadir" button that creates a page from its content template.
 
 ### 2.8 Accounts, Personal Space & Vault
 - Every member has a **personal account** (Argon2 passwords) with a profile page; accounts are the identity anchor for task/project assignment, activity attribution (2.9), and notifications.
@@ -149,12 +150,12 @@ templates/               (project.md, device.md, task.md ...)
 | **5. AI layer** | Summaries, digests, ask-the-wiki chat | 2 wk |
 | **6. Polish & publish** | Scraper, Three.js dashboard, README for other labs, GitHub release | ongoing |
 
-## 5. Tech Decisions to Confirm Before Coding
+## 5. Tech Decisions
 
-1. htmx vs React for the frontend.
+1. **Decided: htmx** (vendored locally, no CDN) for inline interactivity — block editing, later kanban drag & drop.
 2. Task storage: standalone files only vs also inline `checklists` inside project docs (recommend: both, indexer normalizes).
 3. Google sync scope: one shared lab calendar vs per-project calendars vs bidirectional personal calendars (recommend: dedicated MakerOS calendar + task-due push).
-4. UI language toggle or Spanish-only.
+4. **Decided: Spanish-only UI** (strings centralized in templates for a future i18n pass).
 5. Deployment target: bare Docker vs single binary (PyInstaller) — recommend Docker Compose with two services (app + Caddy for TLS inside the tailnet).
 
 ## 6. Non-Goals (v1)

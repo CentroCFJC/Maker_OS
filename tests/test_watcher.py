@@ -11,7 +11,7 @@ from makeros.frontmatter import write
 def _search(client: TestClient, query: str) -> int:
     response = client.get("/search", params={"q": query})
     assert response.status_code == 200
-    return response.text.count('class="result-title"')
+    return response.text.count('class="item-title"')
 
 
 def _wait_for(condition, timeout: float = 15.0, interval: float = 0.25) -> None:

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 
 from ...auth import authenticate
+from ...collections import COLLECTIONS
 from ..deps import ConnDep, UserDep
 from ..templates import templates
 
@@ -16,7 +17,11 @@ router = APIRouter()
 async def login_form(request: Request, user: UserDep):
     if user is not None:
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"user": None, "error": None})
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"user": None, "error": None, "collections": COLLECTIONS, "counts": {}},
+    )
 
 
 @router.post("/login")
@@ -31,7 +36,8 @@ async def login(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"user": None, "error": "Usuario o contraseña incorrectos."},
+            {"user": None, "error": "Usuario o contraseña incorrectos.",
+             "collections": COLLECTIONS, "counts": {}},
             status_code=401,
         )
     request.session["uid"] = user["id"]

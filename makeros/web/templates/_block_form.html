@@ -1,0 +1,12 @@
+<div class="block block-editing" id="block-{{ i }}">
+  <form hx-post="{{ page_url }}/bloques/{{ i }}/editar"
+        hx-target="#block-{{ i }}" hx-swap="outerHTML" class="block-form">
+    <textarea name="text" rows="6" autofocus>{{ text }}</textarea>
+    <div class="block-form-actions">
+      <button type="submit" class="btn-primary">Guardar</button>
+      <button type="button" class="btn-ghost"
+              hx-get="{{ page_url }}/bloques/{{ i }}"
+              hx-target="#block-{{ i }}" hx-swap="outerHTML">Cancelar</button>
+    </div>
+  </form>
+</div>

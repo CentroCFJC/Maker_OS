@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY makeros ./makeros
+COPY templates ./templates
 
 RUN pip install --no-cache-dir .
 

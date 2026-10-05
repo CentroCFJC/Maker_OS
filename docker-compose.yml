@@ -9,6 +9,7 @@ services:
       - makeros-data:/data
       - ./content:/data/content
       - ./private:/data/private
+      - ./templates:/app/templates
     expose:
       - "8000"
 

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — {{ title }}{% endblock %}
+{% block content %}
+<article class="notion-page">
+  <header class="page-header">
+    <p class="breadcrumb"><a href="/{{ collection_slug }}">{{ collection_label }}</a> / {{ title }}</p>
+    <h1>{{ title }}</h1>
+    {% if meta.get("tags") %}
+    <p class="tags">
+      {% for tag in meta.get("tags", []) %}<span class="tag">{{ tag }}</span>{% endfor %}
+    </p>
+    {% endif %}
+  </header>
+
+  <div class="blocks">
+    {% include "_block.html" %}
+  </div>
+
+  {% if can_edit %}
+  <div class="block-add">
+    {% include "_add_menu.html" %}
+  </div>
+  <footer class="page-actions">
+    <form method="post" action="{{ page_url }}/borrar"
+          onsubmit="return confirm('¿Eliminar esta página completa?');">
+      <button type="submit" class="btn-danger-ghost">Eliminar página</button>
+    </form>
+  </footer>
+  {% endif %}
+</article>
+{% endblock %}

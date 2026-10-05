@@ -1,23 +1,26 @@
 {% extends "base.html" %}
 {% block title %}MakerOS — Buscar{% endblock %}
 {% block content %}
-<h1>Buscar</h1>
+<header class="page-header">
+  <h1>Buscar</h1>
+</header>
+
 <form class="big-search" action="/search" method="get">
   <input type="search" name="q" value="{{ q }}" placeholder="Busca en todo el contenido…" aria-label="Buscar" autofocus>
   <button type="submit" class="btn-primary">Buscar</button>
 </form>
 
 {% if q %}
-  <p class="muted">{{ results | length }} resultado(s) para «{{ q }}»</p>
-  <ul class="results">
+  <p class="page-subtitle">{{ results | length }} resultado(s) para «{{ q }}»</p>
+  <ul class="item-list">
     {% for row in results %}
-    <li class="result">
-      <a class="result-title" href="/wiki/{{ row["path"] }}">{{ row["title"] or row["path"] }}</a>
-      <span class="muted">· {{ row["collection"] }}</span>
+    <li class="item-row">
+      <a class="item-title" href="/{{ row["path"] }}">{{ row["title"] or row["path"] }}</a>
+      <span class="item-meta">{{ collections[row["collection"]]["label"] if row["collection"] in collections else row["collection"] }}</span>
       <p class="result-snippet">{{ row["snippet"] | safe }}</p>
     </li>
     {% else %}
-    <li class="muted">Sin resultados. Prueba con otras palabras.</li>
+    <li class="item-empty">Sin resultados. Prueba con otras palabras.</li>
     {% endfor %}
   </ul>
 {% endif %}

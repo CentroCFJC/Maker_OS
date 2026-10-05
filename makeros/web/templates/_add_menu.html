@@ -1,0 +1,15 @@
+<details class="add-menu">
+  <summary>+ Añadir bloque</summary>
+  <div class="add-menu-panel">
+    <form method="post" action="{{ page_url }}/bloques/nuevo">
+      <input type="hidden" name="despues" value="-1">
+      <button type="submit" name="tipo" value="titulo" class="menu-item">Título</button>
+      <button type="submit" name="tipo" value="parrafo" class="menu-item">Párrafo</button>
+      <button type="submit" name="tipo" value="lista" class="menu-item">Lista</button>
+      <button type="submit" name="tipo" value="checklist" class="menu-item">Lista de tareas</button>
+      <button type="submit" name="tipo" value="tabla" class="menu-item">Tabla</button>
+      <button type="submit" name="tipo" value="codigo" class="menu-item">Código</button>
+      <button type="submit" name="tipo" value="cita" class="menu-item">Cita</button>
+    </form>
+  </div>
+</details>

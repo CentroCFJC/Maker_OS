@@ -1,12 +1,12 @@
-"""Home / dashboard v0: recent pages, collection counts, search box."""
+"""Home / dashboard: greeting, category quick access, recent pages."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from ...indexer import collection_counts, recent_documents
-from ..deps import ConnDep, UserDep
+from ...indexer import recent_documents
+from ..deps import ConnDep, UserDep, base_ctx
 from ..templates import templates
 
 router = APIRouter()
@@ -19,9 +19,5 @@ async def home(request: Request, conn: ConnDep, user: UserDep):
     return templates.TemplateResponse(
         request,
         "home.html",
-        {
-            "user": user,
-            "recent": recent_documents(conn, 10),
-            "counts": collection_counts(conn),
-        },
+        base_ctx(request, conn, user, recent=recent_documents(conn, 10)),
     )

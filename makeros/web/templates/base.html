@@ -4,30 +4,47 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MakerOS{% endblock %}</title>
+  <link rel="icon" href="/static/img/logo.png">
   <link rel="stylesheet" href="/static/css/makeros.css">
+  <script src="/static/vendor/htmx.min.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/">Maker<span>OS</span></a>
-    <nav class="main-nav">
-      <a href="/">Inicio</a>
-      <a href="/wiki">Wiki</a>
-    </nav>
-    <form class="searchbox" action="/search" method="get">
-      <input type="search" name="q" placeholder="Buscar…" aria-label="Buscar" value="">
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      <img src="/static/img/logo.png" alt="MakerOS" class="brand-logo">
+      <span class="brand-name">Maker<span>OS</span></span>
+    </a>
+
+    <form class="sidebar-search" action="/search" method="get">
+      <input type="search" name="q" placeholder="Buscar…" aria-label="Buscar">
     </form>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item" href="/"><span class="nav-label">Inicio</span></a>
+      {% for slug, c in collections.items() %}
+      <a class="nav-item" href="/{{ slug }}">
+        <span class="nav-label">{{ c["label"] }}</span>
+        {% if counts.get(slug, 0) > 0 %}<span class="nav-count">{{ counts[slug] }}</span>{% endif %}
+      </a>
+      {% endfor %}
+    </nav>
+
     {% if user %}
-    <div class="userbox">
-      <span class="user-name">{{ user["display_name"] or user["username"] }}</span>
+    <div class="sidebar-user">
+      <span class="avatar">{{ (user["display_name"] or user["username"])[:1] | upper }}</span>
+      <div class="user-meta">
+        <span class="user-name">{{ user["display_name"] or user["username"] }}</span>
+        <span class="user-role">{{ user["role"] }}</span>
+      </div>
       <form action="/logout" method="post">
-        <button type="submit" class="btn-ghost">Salir</button>
+        <button type="submit" class="btn-ghost" title="Cerrar sesión">Salir</button>
       </form>
     </div>
     {% endif %}
-  </header>
-  <main>
+  </aside>
+
+  <main class="content">
     {% block content %}{% endblock %}
   </main>
-  <footer class="footer">MakerOS · Centro de Ciencia FJC · Markdown es la fuente de verdad</footer>
 </body>
 </html>

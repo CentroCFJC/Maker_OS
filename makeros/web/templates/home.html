@@ -1,40 +1,31 @@
 {% extends "base.html" %}
 {% block title %}MakerOS — Inicio{% endblock %}
 {% block content %}
-<section class="hero">
+<header class="page-header">
   <h1>Buenas, {{ user["display_name"] or user["username"] }}</h1>
-  <p>Esto es MakerOS: proyectos, tareas, wiki y registro de dispositivos del laboratorio,
-     todo sobre archivos Markdown.</p>
-  <form class="big-search" action="/search" method="get">
-    <input type="search" name="q" placeholder="Busca en todo el contenido…" aria-label="Buscar">
-    <button type="submit" class="btn-primary">Buscar</button>
-  </form>
+  <p class="page-subtitle">Todo el laboratorio sobre archivos Markdown. Empieza por una colección.</p>
+</header>
+
+<section class="category-grid">
+  {% for slug, c in collections.items() %}
+  <a class="category-card" href="/{{ slug }}">
+    <span class="category-name">{{ c["label"] }}</span>
+    <span class="category-count">{{ counts.get(slug, 0) }} páginas</span>
+  </a>
+  {% endfor %}
 </section>
 
-<section class="grid">
-  <div class="card">
-    <h2>Colecciones</h2>
-    <ul class="counts">
-      {% for row in counts %}
-      <li><span class="count-n">{{ row["n"] }}</span> <a href="/wiki">{{ row["collection"] }}</a></li>
-      {% else %}
-      <li class="muted">Aún no hay contenido indexado.</li>
-      {% endfor %}
-    </ul>
-  </div>
-  <div class="card">
-    <h2>Cambios recientes</h2>
-    <ul class="recent">
-      {% for row in recent %}
-      <li>
-        <a href="/wiki/{{ row["path"] }}">
-          {{ row["title"] or row["path"] }}</a>
-        <span class="muted">· {{ row["collection"] }} · {{ row["indexed_at"] }}</span>
-      </li>
-      {% else %}
-      <li class="muted">Nada indexado todavía.</li>
-      {% endfor %}
-    </ul>
-  </div>
+<section class="home-section">
+  <h2>Cambios recientes</h2>
+  <ul class="item-list">
+    {% for row in recent %}
+    <li class="item-row">
+      <a class="item-title" href="/{{ row["path"] }}">{{ row["title"] or row["path"] }}</a>
+      <span class="item-meta">{{ collections[row["collection"]]["label"] if row["collection"] in collections else row["collection"] }} · {{ row["indexed_at"] }}</span>
+    </li>
+    {% else %}
+    <li class="item-empty">Nada indexado todavía.</li>
+    {% endfor %}
+  </ul>
 </section>
 {% endblock %}

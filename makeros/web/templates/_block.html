@@ -1,0 +1,21 @@
+{% for b in blocks %}
+<div class="block" id="block-{{ b["i"] }}">
+  {% if user and user["role"] != "viewer" %}
+  <div class="block-controls">
+    <button class="btn-mini" title="Editar bloque"
+            hx-get="{{ page_url }}/bloques/{{ b["i"] }}/editar"
+            hx-target="#block-{{ b["i"] }}" hx-swap="outerHTML">Editar</button>
+    <form method="post" action="{{ page_url }}/bloques/{{ b["i"] }}/borrar"
+          onsubmit="return confirm('¿Eliminar este bloque?');">
+      <button type="submit" class="btn-mini" title="Eliminar bloque">Eliminar</button>
+    </form>
+    <form method="post" action="{{ page_url }}/bloques/nuevo" class="add-below">
+      <input type="hidden" name="tipo" value="parrafo">
+      <input type="hidden" name="despues" value="{{ b["i"] }}">
+      <button type="submit" class="btn-mini" title="Añadir bloque debajo">+</button>
+    </form>
+  </div>
+  {% endif %}
+  <div class="block-content">{{ b["html"] | safe }}</div>
+</div>
+{% endfor %}
