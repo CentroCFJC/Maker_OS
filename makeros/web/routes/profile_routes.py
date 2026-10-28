@@ -10,9 +10,10 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ... import auth
+from ...ui import set_nav_order
 from ..deps import ConnDep, UserDep, base_ctx, get_settings
 from ..templates import templates
 from ..uploads import MAX_UPLOAD_BYTES, UPLOAD_EXTENSIONS, safe_upload_path, uploads_dir
@@ -96,6 +97,23 @@ async def profile_details(
         return RedirectResponse("/login", status_code=303)
     auth.set_display_name(conn, user["id"], display_name.strip() or user["username"])
     return RedirectResponse("/perfil", status_code=303)
+
+
+@router.post("/perfil/nav")
+async def profile_nav_order(
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    order: Annotated[str, Form()],
+):
+    """Save this user's sidebar section order (drag & drop in the sidebar)."""
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    try:
+        set_nav_order(conn, user, [part for part in order.split(",") if part])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="orden no válido") from None
+    return HTMLResponse("ok")
 
 
 @router.post("/perfil/clave")

@@ -85,33 +85,23 @@
     {% endif %}
 
     <div class="sidebar-section nav-section">
-      <p class="sidebar-label">Bases de datos</p>
-      <nav class="sidebar-nav" aria-label="Secciones">
-        <a class="nav-item" href="/">
-          {{ icon("home") }}
-          <span class="nav-label">Inicio</span>
-        </a>
-        {% for slug, c in collections.items() %}
-        {% if slug not in ("people", "exhibits", "avisos") %}
-        <a class="nav-item" href="/{{ slug }}">
-          {{ icon(nav_icons.get(slug)) }}
-          <span class="nav-label">{{ c["label"] }}</span>
-          {% if counts.get(slug, 0) > 0 %}<span class="nav-count">{{ counts[slug] }}</span>{% endif %}
-        </a>
+      <p class="sidebar-label">
+        Bases de datos
+        {% if user %}
+        <button type="button" class="nav-reorder-toggle" aria-label="Reordenar secciones"
+                title="Reordenar secciones" onclick="makerosNavReorder(this)">
+          {{ icon("move") }}
+        </button>
         {% endif %}
+      </p>
+      <nav class="sidebar-nav" aria-label="Secciones">
+        {% for item in nav_entries %}
+        <a class="nav-item" href="{{ item.href }}" data-nav="{{ item.id }}" draggable="false">
+          {{ icon(item.icon) }}
+          <span class="nav-label">{{ item.label }}</span>
+          {% if item.count > 0 %}<span class="nav-count">{{ item.count }}</span>{% endif %}
+        </a>
         {% endfor %}
-        <a class="nav-item" href="/explorador">
-          {{ icon("folder") }}
-          <span class="nav-label">Explorador</span>
-        </a>
-        <a class="nav-item" href="/notas">
-          {{ icon("lock") }}
-          <span class="nav-label">Mis notas</span>
-        </a>
-        <a class="nav-item" href="/asistente">
-          {{ icon("cpu") }}
-          <span class="nav-label">Asistente</span>
-        </a>
       </nav>
     </div>
 

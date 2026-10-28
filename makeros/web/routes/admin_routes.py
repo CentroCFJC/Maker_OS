@@ -10,9 +10,9 @@ import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from ... import auth
+from ... import auth, backups
 from ...indexer import reindex_all
 from ...ui import THEME_ACCENTS, THEME_BGS, set_ui
 from .. import event_store, llm
@@ -55,6 +55,10 @@ def _admin_response(request: Request, conn: sqlite3.Connection, user):
             feed_url=f"{base}/calendario.ics?token={get_feed_token(conn)}",
             llm_base_url=llm_base_url,
             llm_model=llm_model,
+            backup_list=backups.list_backups(settings),
+            backup_interval=backups.interval_hours(conn),
+            backup_keep=backups.keep_count(conn),
+            backup_intervals=backups.INTERVALS,
             **gcal_status(conn, settings),
         ),
     )
@@ -147,6 +151,92 @@ async def admin_set_role(
     return RedirectResponse("/admin#usuarios", status_code=303)
 
 
+@router.get("/admin/usuarios/{user_id}/editar")
+async def admin_user_edit_form(
+    request: Request, conn: ConnDep, user: UserDep, user_id: int
+):
+    """Fragment for the 'Editar usuario' modal."""
+    if (fail := _auth_fail(user)) is not None:
+        return fail
+    target = auth.get_user(conn, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="usuario no encontrado")
+    return templates.TemplateResponse(
+        request,
+        "_admin_user_edit.html",
+        base_ctx(request, conn, user, roles=auth.ROLES, target=target),
+    )
+
+
+@router.post("/admin/usuarios/{user_id}/editar")
+async def admin_user_edit(
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    user_id: int,
+    username: Annotated[str, Form()],
+    display_name: Annotated[str, Form()] = "",
+    role: Annotated[str, Form()] = "member",
+):
+    """Rename an account, update its display name and role."""
+    if (fail := _auth_fail(user)) is not None:
+        return fail
+    modal = request.headers.get("hx-request") == "true"
+    target = auth.get_user(conn, user_id)
+
+    def fail_form(error: str):
+        if not modal or target is None:
+            raise HTTPException(status_code=400, detail=error)
+        return templates.TemplateResponse(
+            request,
+            "_admin_user_edit.html",
+            base_ctx(
+                request, conn, user,
+                roles=auth.ROLES,
+                target=target,
+                error=error,
+            ),
+        )
+
+    if target is None:
+        raise HTTPException(status_code=404, detail="usuario no encontrado")
+    if role not in auth.ROLES:
+        return fail_form("rol no válido")
+    try:
+        auth.rename_user(conn, user_id, username)
+    except ValueError as exc:
+        return fail_form(
+            "ese usuario ya existe" if "already exists" in str(exc) else "falta el usuario"
+        )
+    try:
+        auth.update_role(conn, user_id, role)
+    except PermissionError:
+        return fail_form("no puedes quitar el último administrador")
+    auth.set_display_name(conn, user_id, display_name.strip() or username.strip())
+    if modal:
+        return HTMLResponse(
+            "<script>makerosCloseModal(); window.location.reload();</script>"
+        )
+    return RedirectResponse("/admin#usuarios", status_code=303)
+
+
+@router.get("/admin/usuarios/{user_id}/clave")
+async def admin_password_form(
+    request: Request, conn: ConnDep, user: UserDep, user_id: int
+):
+    """Fragment for the 'Restablecer contraseña' modal."""
+    if (fail := _auth_fail(user)) is not None:
+        return fail
+    target = auth.get_user(conn, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="usuario no encontrado")
+    return templates.TemplateResponse(
+        request,
+        "_admin_password_form.html",
+        base_ctx(request, conn, user, target=target),
+    )
+
+
 @router.post("/admin/usuarios/{user_id}/clave")
 async def admin_reset_password(
     request: Request,
@@ -157,14 +247,27 @@ async def admin_reset_password(
 ):
     if (fail := _auth_fail(user)) is not None:
         return fail
-    if len(password) < MIN_PASSWORD_LEN:
-        raise HTTPException(
-            status_code=400, detail=f"la contraseña necesita {MIN_PASSWORD_LEN} caracteres mínimo"
+    modal = request.headers.get("hx-request") == "true"
+    target = auth.get_user(conn, user_id)
+
+    def fail_form(error: str):
+        if not modal or target is None:
+            raise HTTPException(status_code=400, detail=error)
+        return templates.TemplateResponse(
+            request,
+            "_admin_password_form.html",
+            base_ctx(request, conn, user, target=target, error=error),
         )
-    try:
-        auth.set_password(conn, user_id, password)
-    except LookupError:
-        raise HTTPException(status_code=404, detail="usuario no encontrado") from None
+
+    if target is None:
+        raise HTTPException(status_code=404, detail="usuario no encontrado")
+    if len(password) < MIN_PASSWORD_LEN:
+        return fail_form(f"la contraseña necesita {MIN_PASSWORD_LEN} caracteres mínimo")
+    auth.set_password(conn, user_id, password)
+    if modal:
+        return HTMLResponse(
+            "<script>makerosCloseModal(); window.location.reload();</script>"
+        )
     return RedirectResponse("/admin#usuarios", status_code=303)
 
 
@@ -274,3 +377,55 @@ async def admin_delete_category(
         return fail
     event_store.delete_category(conn, category_id)
     return RedirectResponse("/admin#categorias", status_code=303)
+
+
+@router.post("/admin/backup")
+async def admin_backup_now(request: Request, conn: ConnDep, user: UserDep):
+    """Create a backup snapshot right now."""
+    if (fail := _auth_fail(user)) is not None:
+        return fail
+    settings = get_settings(request)
+    backups.create_backup(settings)
+    backups.record_run(conn)
+    backups.prune(settings, backups.keep_count(conn))
+    return RedirectResponse("/admin#copias", status_code=303)
+
+
+@router.post("/admin/backup/config")
+async def admin_backup_config(
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    interval: Annotated[str, Form()],
+    keep: Annotated[str, Form()] = "10",
+):
+    """Recurring schedule + retention."""
+    if (fail := _auth_fail(user)) is not None:
+        return fail
+    try:
+        hours = int(interval)
+        count = max(1, min(200, int(keep)))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="valor de copia no válido") from None
+    if hours not in (0, 1, 6, 12, 24, 168):
+        raise HTTPException(status_code=400, detail="intervalo no válido") from None
+    backups.save_schedule(conn, hours, count)
+    return RedirectResponse("/admin#copias", status_code=303)
+
+
+@router.get("/admin/backup/{name}/descargar")
+async def admin_backup_download(
+    request: Request, conn: ConnDep, user: UserDep, name: str
+):
+    """Download one backup zip. Name must match our generated prefix pattern."""
+    if (fail := _auth_fail(user)) is not None:
+        return fail
+    settings = get_settings(request)
+    if not name.startswith(backups._NAME_PREFIX) or not name.endswith(".zip"):
+        raise HTTPException(status_code=404, detail="copia no encontrada")
+    if "/" in name or "\\" in name or ".." in name:
+        raise HTTPException(status_code=404, detail="copia no encontrada")
+    path = backups.backups_dir(settings) / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="copia no encontrada")
+    return FileResponse(path, filename=name, media_type="application/zip")

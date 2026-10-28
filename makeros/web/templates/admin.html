@@ -21,6 +21,8 @@
           onclick="makerosAdminTab('personas')">Personas</button>
   <button type="button" class="admin-tab-button" role="tab" data-tab="integracion"
           onclick="makerosAdminTab('integracion')">Integraciones</button>
+  <button type="button" class="admin-tab-button" role="tab" data-tab="copias"
+          onclick="makerosAdminTab('copias')">Copias</button>
   <button type="button" class="admin-tab-button" role="tab" data-tab="sistema"
           onclick="makerosAdminTab('sistema')">Sistema</button>
 </nav>
@@ -44,27 +46,16 @@
           {{ row["username"] }}
         </td>
         <td>{{ row["display_name"] }}</td>
-        <td>
-          <form class="admin-inline" method="post"
-                action="/admin/usuarios/{{ row["id"] }}/rol">
-            <select name="role" aria-label="Rol de {{ row["username"] }}">
-              {% for r in roles %}
-              <option value="{{ r }}"{% if r == row["role"] %} selected{% endif %}>{{ r }}</option>
-              {% endfor %}
-            </select>
-            <button class="btn-ghost" type="submit">Guardar</button>
-          </form>
-        </td>
+        <td>{{ row["role"] }}</td>
         <td class="admin-muted">{{ row["created_at"] }}</td>
         <td>
           <div class="admin-actions">
-            <form class="admin-inline" method="post"
-                  action="/admin/usuarios/{{ row["id"] }}/clave">
-              <input type="password" name="password" placeholder="Nueva contraseña"
-                     minlength="8" aria-label="Nueva contraseña para {{ row["username"] }}" required>
-              <button class="btn-ghost" type="submit"
-                      title="Establecer una contraseña nueva (mínimo 8 caracteres)">Restablecer</button>
-            </form>
+            <button type="button" class="btn-ghost"
+                    onclick="makerosOpenModal('/admin/usuarios/{{ row['id'] }}/editar?fragmento=1')"
+                    title="Usuario, nombre visible y rol">Editar</button>
+            <button type="button" class="btn-ghost"
+                    onclick="makerosOpenModal('/admin/usuarios/{{ row['id'] }}/clave?fragmento=1')"
+                    title="Establecer una contraseña nueva">Contraseña</button>
             <form method="post" action="/admin/usuarios/{{ row["id"] }}/eliminar">
               <button class="btn-ghost admin-danger" type="submit"
                       {% if row["id"] == user["id"] %}disabled
@@ -281,6 +272,47 @@
             title="Genera un token nuevo; la dirección anterior deja de funcionar">
       Revocar token y generar otro</button>
   </form>
+</section>
+
+<section class="admin-tab" data-tab="copias" role="tabpanel">
+  <h2>Copias de seguridad</h2>
+  <p class="admin-muted">Cada copia reúne todo el sistema en un zip: los
+    documentos y subidas, las notas privadas, las plantillas y la base de
+    datos (usuarios, eventos del calendario, ajustes).</p>
+
+  <form class="admin-tool" method="post" action="/admin/backup">
+    <button class="btn-primary" type="submit">Crear copia ahora</button>
+  </form>
+
+  <h3 class="admin-sub">Copia automática</h3>
+  <form class="admin-form" method="post" action="/admin/backup/config">
+    <label for="backup-interval">Frecuencia</label>
+    <select id="backup-interval" name="interval" aria-label="Frecuencia de la copia automática">
+      {% for value, label in backup_intervals %}
+      <option value="{{ value }}"{% if value == backup_interval|string %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <label for="backup-keep">Copias a conservar</label>
+    <input id="backup-keep" type="number" name="keep" min="1" max="200"
+           value="{{ backup_keep }}" aria-label="Número de copias a conservar">
+    <button class="btn-ghost" type="submit">Guardar</button>
+  </form>
+  <p class="admin-muted">Cuando se cumple la frecuencia el servidor genera la
+    copia por sí solo y borra las más antiguas que el número indicado.</p>
+
+  <h3 class="admin-sub">Copias guardadas</h3>
+  <ul class="item-list">
+    {% for b in backup_list %}
+    <li class="item-row">
+      <span class="item-title">{{ b.name }}</span>
+      <span class="item-meta">{{ b.created }} · {{ "%.1f"|format(b.size_mb) }} MB</span>
+      <a class="btn-ghost" href="/admin/backup/{{ b.name }}/descargar"
+         title="Descargar esta copia">Descargar</a>
+    </li>
+    {% else %}
+    <li class="item-row"><span class="item-meta">Todavía no hay copias.</span></li>
+    {% endfor %}
+  </ul>
 </section>
 
 <section class="admin-tab" data-tab="sistema" role="tabpanel">

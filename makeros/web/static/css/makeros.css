@@ -1753,3 +1753,30 @@ html[data-theme="dark"] { --brain-fab-ink: #241426; }
 .explorer-content { min-width: 0; }
 .explorer-current > a, .explorer-current a { color: var(--accent); font-weight: 700; }
 .explorer-cards .item-card { min-height: 0; }
+
+/* ---------- Sidebar nav reorder ---------- */
+.sidebar-label { display: flex; align-items: center; gap: 6px; }
+.nav-reorder-toggle {
+  margin-left: auto; padding: 2px; border: 0; background: none;
+  color: var(--muted); cursor: pointer; border-radius: 4px;
+  display: inline-flex; opacity: 0; transition: opacity 0.15s;
+}
+.sidebar-section:hover .nav-reorder-toggle,
+.nav-reorder-toggle.active { opacity: 1; }
+.nav-reorder-toggle:hover { color: var(--ink); }
+.nav-reorder-toggle.active { color: var(--accent); }
+.nav-reorder-toggle .icon { width: 13px; height: 13px; }
+.sidebar-nav.nav-reordering .nav-item { cursor: grab; }
+.sidebar-nav.nav-reordering .nav-item:hover {
+  background: var(--sidebar-hover);
+  outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -1px;
+}
+html[data-sidebar="collapsed"] .nav-reorder-toggle { opacity: 1; }
+
+/* ---------- Two-click confirm button (dangerous actions) ---------- */
+.modal-note { color: var(--muted); font-size: 13.5px; margin: 0; }
+.btn-confirm {
+  background: var(--accent) !important; border-color: var(--accent) !important;
+  color: #fff !important;
+}

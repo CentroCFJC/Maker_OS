@@ -1,0 +1,23 @@
+<span data-modal-title hidden>Editar usuario</span>
+<form class="modal-form"
+      hx-post="/admin/usuarios/{{ target['id'] }}/editar"
+      hx-target="#makeros-modal-body" hx-swap="innerHTML">
+  {% if error %}<p class="modal-error">{{ error }}</p>{% endif %}
+  <label>Usuario (para iniciar sesión)
+    <input type="text" name="username" value="{{ target['username'] }}" required autofocus>
+  </label>
+  <label>Nombre visible
+    <input type="text" name="display_name" value="{{ target['display_name'] }}">
+  </label>
+  <label>Rol
+    <select name="role">
+      {% for r in roles %}
+      <option value="{{ r }}"{% if r == target['role'] %} selected{% endif %}>{{ r }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="modal-actions">
+    <button type="button" class="btn-ghost" onclick="makerosCloseModal()">Cancelar</button>
+    <button type="submit" class="btn-primary">Guardar cambios</button>
+  </div>
+</form>

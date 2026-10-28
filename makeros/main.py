@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from . import backups
 from .auth import count_users
 from .config import Settings
 from .db import connect, init_schema
@@ -88,9 +89,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     log.exception("gcal sync loop crashed; retrying next cycle")
 
         sync_task = asyncio.create_task(gcal_loop())
+
+        async def backup_loop():
+            """Recurring backups: check every 10 minutes, run when due.
+
+            The loop never dies: one bad cycle (disk full, locked file)
+            logs and waits for the next one.
+            """
+            while True:
+                await asyncio.sleep(600)
+                try:
+                    conn = connect(settings.db_path)
+                    try:
+                        if backups.due(conn, settings):
+                            path = backups.create_backup(settings)
+                            backups.record_run(conn)
+                            backups.prune(settings, backups.keep_count(conn))
+                            log.info("backup: %s", path.name)
+                    finally:
+                        conn.close()
+                except Exception:  # noqa: BLE001 — keep the loop alive
+                    log.exception("backup loop crashed; retrying next cycle")
+
+        backup_task = asyncio.create_task(backup_loop())
         try:
             yield
         finally:
+            backup_task.cancel()
             sync_task.cancel()
             watcher.stop()
 

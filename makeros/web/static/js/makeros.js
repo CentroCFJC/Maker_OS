@@ -831,3 +831,60 @@ document.addEventListener("DOMContentLoaded", function () {
     document.addEventListener("mouseup", onUp);
   });
 });
+
+// ---- Sidebar "Bases de datos" reorder (per-user saved order) ----
+window.makerosNavReorder = function (btn) {
+  var nav = document.querySelector(".sidebar-nav");
+  if (!nav || typeof Sortable === "undefined") { return; }
+  var on = nav.classList.toggle("nav-reordering");
+  btn.classList.toggle("active", on);
+  btn.title = on ? "Terminar de reordenar" : "Reordenar secciones";
+  btn.setAttribute("aria-label", btn.title);
+  if (on) {
+    if (!nav._makerosNavSortable) {
+      nav._makerosNavSortable = Sortable.create(nav, {
+        animation: 150,
+        draggable: ".nav-item",
+        onEnd: function () { makerosNavSave(nav); },
+      });
+    }
+  } else if (nav._makerosNavSortable) {
+    nav._makerosNavSortable.destroy();
+    nav._makerosNavSortable = null;
+  }
+};
+
+function makerosNavSave(nav) {
+  var ids = Array.prototype.map.call(
+    nav.querySelectorAll(".nav-item"),
+    function (el) { return el.dataset.nav; }
+  );
+  fetch("/perfil/nav", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "order=" + encodeURIComponent(ids.join(",")),
+  }).catch(function () {});
+}
+
+// While reordering, nav items must not act as links.
+document.addEventListener("click", function (e) {
+  var nav = document.querySelector(".sidebar-nav.nav-reordering");
+  if (nav && e.target.closest(".nav-item")) { e.preventDefault(); }
+}, true);
+
+// ---- Two-click confirm: first click arms, second click submits ----
+window.makerosConfirmSubmit = function (btn, e) {
+  if (btn.dataset.confirming === "1") { return; }  // armed: let it submit
+  e.preventDefault();
+  btn.dataset.confirming = "1";
+  btn.dataset.label = btn.textContent;
+  btn.textContent = "¿Seguro? Confirmar";
+  btn.classList.add("btn-confirm");
+  setTimeout(function () {
+    if (btn.isConnected) {
+      delete btn.dataset.confirming;
+      btn.textContent = btn.dataset.label;
+      btn.classList.remove("btn-confirm");
+    }
+  }, 3500);
+};

@@ -114,6 +114,21 @@ def set_password(conn: sqlite3.Connection, user_id: int, password: str) -> None:
     conn.commit()
 
 
+def rename_user(conn: sqlite3.Connection, user_id: int, username: str) -> None:
+    """Change an account's login username. Sessions key off user id, so
+    logged-in sessions (and avatars, stored by /media/ path) survive."""
+    if get_user(conn, user_id) is None:
+        raise LookupError("user not found")
+    username = username.strip().lower()
+    if not username:
+        raise ValueError("username empty")
+    try:
+        conn.execute("UPDATE users SET username = ? WHERE id = ?", (username, user_id))
+        conn.commit()
+    except sqlite3.IntegrityError as exc:
+        raise ValueError("username already exists") from exc
+
+
 def delete_user(conn: sqlite3.Connection, user_id: int) -> None:
     """Remove an account; the last admin cannot be deleted."""
     row = get_user(conn, user_id)

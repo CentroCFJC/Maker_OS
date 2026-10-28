@@ -58,3 +58,53 @@ def theme_accent(conn: sqlite3.Connection) -> str:
 def theme_bg(conn: sqlite3.Connection) -> str:
     value = get_ui(conn, "theme:background")
     return value if value in THEME_BGS else "blanco"
+
+
+# Sidebar "Bases de datos" entries a user may reorder. Collection slugs
+# resolve through COLLECTIONS; the rest are fixed chrome entries.
+NAV_FIXED = (
+    ("inicio", "Inicio", "home", "/"),
+    ("explorador", "Explorador", "folder", "/explorador"),
+    ("notas", "Mis notas", "lock", "/notas"),
+    ("asistente", "Asistente", "cpu", "/asistente"),
+)
+_NAV_KEY = "nav:"
+
+
+def nav_ids(conn: sqlite3.Connection, user) -> list[str]:
+    """Saved per-user sidebar order (default order for missing entries)."""
+    default = ["inicio", *[s for s in COLLECTIONS if s not in ("people", "exhibits", "avisos")],
+               "explorador", "notas", "asistente"]
+    if user is None:
+        return default
+    raw = get_ui(conn, _NAV_KEY + user["username"], "")
+    saved = [part for part in raw.split(",") if part]
+    known = set(default)
+    ordered = [entry for entry in saved if entry in known]
+    ordered += [entry for entry in default if entry not in ordered]
+    return ordered
+
+
+def set_nav_order(conn: sqlite3.Connection, user, ids: list[str]) -> None:
+    """Persist one user's sidebar order (validated against nav_ids)."""
+    known = set(nav_ids(conn, None))
+    clean = [entry for entry in ids if entry in known]
+    if len(clean) != len(known):
+        raise ValueError("orden incompleto")
+    set_ui(conn, _NAV_KEY + user["username"], ",".join(clean))
+
+
+def nav_items(conn: sqlite3.Connection, user) -> list[dict]:
+    """Sidebar entries in this user's order, ready for the template."""
+    icons = collection_icons(conn)
+    fixed = {entry_id: (label, icon, href) for entry_id, label, icon, href in NAV_FIXED}
+    items = []
+    for entry_id in nav_ids(conn, user):
+        if entry_id in fixed:
+            label, icon, href = fixed[entry_id]
+        else:
+            info = COLLECTIONS[entry_id]
+            label, href = info["label"], f"/{entry_id}"
+            icon = icons.get(entry_id, info.get("icon", ""))
+        items.append({"id": entry_id, "label": label, "icon": icon, "href": href})
+    return items

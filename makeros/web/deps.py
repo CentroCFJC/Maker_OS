@@ -13,7 +13,7 @@ from ..collections import COLLECTIONS, STATUS_HELP, STATUS_LABELS, TASK_STATUSES
 from ..config import Settings
 from ..db import connect
 from ..indexer import collection_counts, list_collection
-from ..ui import collection_icons, get_ui, theme_accent, theme_bg
+from ..ui import collection_icons, get_ui, nav_items, theme_accent, theme_bg
 from . import event_store
 from .forms import TASK_PRIORITIES
 from .icons import icon_names
@@ -56,10 +56,15 @@ def base_ctx(
     counts = {row["collection"]: row["n"] for row in collection_counts(conn)}
     # Calendar events are SQLite rows now, not Markdown documents.
     counts["calendario"] = event_store.event_count(conn)
+    # Sidebar entries in this user's saved order; collections carry counts.
+    items = nav_items(conn, user)
+    for item in items:
+        item["count"] = counts.get(item["id"], 0) if item["id"] in COLLECTIONS else 0
     ctx: dict[str, Any] = {
         "user": user,
         "counts": counts,
         "collections": COLLECTIONS,
+        "nav_entries": items,
         "nav_icons": collection_icons(conn),
         "icon_list": icon_names(),
         "today_events": todays_events(conn),
