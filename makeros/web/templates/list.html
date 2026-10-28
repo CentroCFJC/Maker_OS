@@ -4,25 +4,43 @@
 <header class="page-header">
   <p class="breadcrumb"><a href="/">Inicio</a> / {{ collection_label }}</p>
   <div class="page-header-row">
-    <h1>{{ collection_label }}</h1>
+    <h1 class="page-title-with-icon">{% include "_section_icon_picker.html" %}<span>{{ collection_label }}</span></h1>
     <div class="header-actions">
       <nav class="view-toggle" aria-label="Vista">
-        <a class="view-option{% if vista != 'tarjetas' and vista != 'kanban' %} active{% endif %}"
+        <a class="view-option{% if vista != 'tarjetas' and vista != 'kanban' and vista != 'arbol' %} active{% endif %}"
            href="/{{ collection_slug }}?vista=lista{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Lista</a>
         {% if collection_slug == "tasks" %}
         <a class="view-option{% if vista == 'kanban' %} active{% endif %}"
            href="/{{ collection_slug }}?vista=kanban{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Kanban</a>
         {% endif %}
+        {% if collection_slug == "wiki" %}
+        <a class="view-option{% if vista == 'arbol' %} active{% endif %}"
+           href="/{{ collection_slug }}?vista=arbol" title="Árbol de carpetas con arrastrar y soltar">Árbol</a>
+        {% endif %}
         <a class="view-option{% if vista == 'tarjetas' %} active{% endif %}"
            href="/{{ collection_slug }}?vista=tarjetas{% if estado != 'todos' %}&estado={{ estado }}{% endif %}">Tarjetas</a>
       </nav>
-      {% include "_section_icon_picker.html" %}
+      {% if collection_slug == "wiki" %}
+      <a class="btn-ghost" href="/wiki/grafos" title="Ver el grafo de conexiones">{{ icon("share-2") }} Grafo</a>
+      {% endif %}
+      {% if collection_slug == "wiki" and user and user["role"] != "viewer" %}
+      <details class="icon-picker">
+        <summary>{{ icon("folder-plus") }}<span>Nueva carpeta</span></summary>
+        <form method="post" action="/wiki/carpeta" class="icon-grid-form vault-newfolder-form">
+          <label>Ruta de la carpeta (puede anidarse: guias/impresion)
+            <input name="ruta" placeholder="carpeta/subcarpeta" required>
+          </label>
+          <button class="btn-primary" type="submit">Crear carpeta</button>
+        </form>
+      </details>
+      {% endif %}
       {% if user and user["role"] == "admin" %}
       <a class="btn-ghost" href="/{{ collection_slug }}/plantilla"
          title="Editar el contenido con el que se crean las páginas nuevas de {{ collection_label }}">Plantilla</a>
       {% endif %}
       {% if user and user["role"] != "viewer" %}
-      <a class="btn-primary" href="/{{ collection_slug }}/nuevo">+ Añadir</a>
+      <button type="button" class="btn-primary"
+              onclick="makerosOpenModal('/{{ collection_slug }}/nuevo?fragmento=1{% if carpeta %}&ruta={{ carpeta }}{% endif %}')">+ Añadir</button>
       {% endif %}
     </div>
   </div>
@@ -54,7 +72,7 @@
   {% if vista == "kanban" %}
   <div class="kanban" data-group="{{ group["slug"] }}">
     {% for status, label in task_status_labels.items() %}
-    <div class="kanban-col">
+    <div class="kanban-col" data-status="{{ status }}">
       <h3>{{ label }}
         <span class="count-pill">
           {{ group["items"] | selectattr("status", "equalto", status) | list | length }}
@@ -62,8 +80,31 @@
       </h3>
       <div class="kanban-cards" data-status="{{ status }}">
         {% for item in group["items"] if item["status"] == status %}
-        <div class="kanban-card" data-path="{{ item["path"] }}">
-          <a class="kanban-title" href="/{{ item["path"] }}">{{ item["title"] or item["path"] }}</a>
+        <div class="kanban-card" data-path="{{ item["path"] }}"
+             onclick="if (makerosKanbanDragBlocked && makerosKanbanDragBlocked()) return;
+                      makerosOpenModal('/tasks/{{ item["path"][6:] }}/editar?fragmento=1')">
+          <div class="kanban-card-top">
+            <a class="kanban-title" href="/{{ item["path"] }}"
+               onclick="event.stopPropagation()">{{ item["title"] or item["path"] }}</a>
+            <button type="button" class="kanban-edit" title="Editar tarea"
+                    aria-label="Editar {{ item["title"] or item["path"] }}"
+                    onclick="event.stopPropagation(); makerosOpenModal('/tasks/{{ item["path"][6:] }}/editar?fragmento=1')">
+              {{ icon("edit-2") }}
+            </button>
+          </div>
+          <div class="kanban-tags">
+            {% if item["project"] %}
+            <a class="kanban-chip" href="/projects/{{ item["project"] }}/project"
+               onclick="event.stopPropagation()">{{ item["project"] }}</a>
+            {% endif %}
+            {% if item["priority"] %}
+            <span class="kanban-chip kanban-prio kanban-prio-{{ item["priority"] }}">
+              {{ priority_labels.get(item["priority"], item["priority"]) }}</span>
+            {% endif %}
+          </div>
+          {% if item["extract"] %}
+          <p class="kanban-extract">{{ item["extract"] }}</p>
+          {% endif %}
           <div class="kanban-meta">
             {% if item["dates"] %}
             <span class="kanban-due{% if item["vencido"] %} vencido{% endif %}">
@@ -100,6 +141,36 @@
 <p class="item-empty">Todavía no hay tareas. Crea la primera con «+ Añadir».</p>
 {% endfor %}
 {% elif vista == "tarjetas" %}
+{% if carpeta %}
+<p class="vault-breadcrumb">
+  <a href="/{{ collection_slug }}">{{ collection_slug }}</a>
+  {% set parts = carpeta.split("/") %}
+  {% set ns = namespace(acc = "") %}
+  {% for part in parts %}
+  {% set ns.acc = (ns.acc ~ "/" ~ part) if ns.acc else part %}
+  / <a href="/{{ collection_slug }}?carpeta={{ ns.acc }}">{{ part }}</a>
+  {% endfor %}
+</p>
+{% endif %}
+{% if folders %}
+<div class="notes-folders">
+  {% for f in folders %}
+  <a class="note-folder" href="/{{ collection_slug }}?carpeta={{ (carpeta ~ '/' ~ f["name"]) if carpeta else f["name"] }}">
+    {{ icon("folder") }}
+    <span class="note-folder-name">{{ f["name"] }}</span>
+    <span class="count-pill">{{ f["count"] }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if item_tags %}
+<div class="chip-row tag-filter" data-filter-scope="#collection-cards" aria-label="Filtrar por etiquetas">
+  <button type="button" class="filter-chip active" data-tag="">Todas</button>
+  {% for tag in item_tags %}
+  <button type="button" class="filter-chip" data-tag="{{ tag }}">{{ tag }}</button>
+  {% endfor %}
+</div>
+{% endif %}
 <div class="card-size">
   <label for="card-size">Tamaño de tarjetas</label>
   <input type="range" id="card-size" class="card-size-input" min="1" max="4" step="1" value="2"
@@ -107,9 +178,9 @@
          title="1 Compacta: título y estado · 2 Normal: añade portada y actualización · 3 Detallada: añade fechas y progreso · 4 Completa: añade descripción">
   <span class="card-size-label" data-step-label>Normal</span>
 </div>
-<div class="card-grid" data-step="2">
+<div class="card-grid" data-step="2" id="collection-cards">
   {% for item in items %}
-  <a class="item-card" href="/{{ item["path"] }}">
+  <a class="item-card tagged-card" href="/{{ item["path"] }}" data-tags="{{ item["tags"] | join(',') }}">
     {% include "_card.html" %}
   </a>
   {% else %}

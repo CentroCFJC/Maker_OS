@@ -4,14 +4,33 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MakerOS{% endblock %}</title>
+  <script>
+    // Restore the theme before first paint (no flash of the wrong mode).
+    (function () {
+      try {
+        var saved = localStorage.getItem("makeros-theme");
+        if (!saved) {
+          saved = window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark" : "light";
+        }
+        document.documentElement.dataset.theme = saved;
+      } catch (e) { /* private mode: default light */ }
+      try {
+        if (localStorage.getItem("makeros-sidebar") === "collapsed") {
+          document.documentElement.dataset.sidebar = "collapsed";
+        }
+      } catch (e) { /* keep expanded */ }
+    })();
+  </script>
   <link rel="icon" href="/static/img/logo.png">
   <link rel="stylesheet" href="/static/css/makeros.css">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/sortable.min.js" defer></script>
   <script src="/static/js/makeros.js" defer></script>
 </head>
-<body>
+<body data-accent="{{ theme_accent }}" data-bg="{{ theme_bg }}">
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  {% if not panel %}
   <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false"
           onclick="makerosToggleSidebar(this)">
     <svg class="icon" aria-hidden="true"><use href="/static/vendor/feather-sprite.svg#menu"/></svg>
@@ -20,10 +39,19 @@
   <div class="sidebar-backdrop" onclick="makerosToggleSidebar(document.querySelector('.nav-toggle'))"
        aria-hidden="true"></div>
   <aside class="sidebar">
-    <a class="brand" href="/">
-      <img src="/static/img/logo.png" alt="MakerOS" class="brand-logo">
-      <span class="brand-name">Maker<span>OS</span></span>
-    </a>
+    <div class="brand-row">
+      <a class="brand" href="/">
+        <img src="/static/img/logo.png" alt="MakerOS" class="brand-logo">
+        <span class="brand-name">Maker<span>OS</span></span>
+      </a>
+      <button type="button" class="sidebar-collapse" id="sidebar-collapse"
+              aria-label="Contraer el menú lateral" title="Contraer el menú lateral"
+              onclick="makerosToggleSidebar(this)">
+        <svg class="icon" aria-hidden="true">
+          <use href="/static/vendor/feather-sprite.svg#chevrons-left" id="sidebar-collapse-icon"/>
+        </svg>
+      </button>
+    </div>
 
     <form class="sidebar-search" action="/search" method="get">
       <input type="search" name="q" placeholder="Buscar…" aria-label="Buscar">
@@ -64,31 +92,107 @@
           <span class="nav-label">Inicio</span>
         </a>
         {% for slug, c in collections.items() %}
+        {% if slug not in ("people", "exhibits", "avisos") %}
         <a class="nav-item" href="/{{ slug }}">
           {{ icon(nav_icons.get(slug)) }}
           <span class="nav-label">{{ c["label"] }}</span>
           {% if counts.get(slug, 0) > 0 %}<span class="nav-count">{{ counts[slug] }}</span>{% endif %}
         </a>
+        {% endif %}
         {% endfor %}
+        <a class="nav-item" href="/explorador">
+          {{ icon("folder") }}
+          <span class="nav-label">Explorador</span>
+        </a>
+        <a class="nav-item" href="/notas">
+          {{ icon("lock") }}
+          <span class="nav-label">Mis notas</span>
+        </a>
+        <a class="nav-item" href="/asistente">
+          {{ icon("cpu") }}
+          <span class="nav-label">Asistente</span>
+        </a>
       </nav>
     </div>
 
     {% if user %}
     <div class="sidebar-user">
+      {% if user["avatar"] %}
+      <img class="avatar" src="/media/{{ user["avatar"] }}"
+           alt="Foto de {{ user["display_name"] or user["username"] }}">
+      {% else %}
       <span class="avatar">{{ (user["display_name"] or user["username"])[:1] | upper }}</span>
+      {% endif %}
       <div class="user-meta">
-        <span class="user-name">{{ user["display_name"] or user["username"] }}</span>
+        {% if user["role"] == "admin" %}
+        <a class="user-name" href="/admin" title="Panel de administración">
+          {{ user["display_name"] or user["username"] }}</a>
+        {% else %}
+        <a class="user-name" href="/perfil" title="Mi perfil">
+          {{ user["display_name"] or user["username"] }}</a>
+        {% endif %}
         <span class="user-role">{{ user["role"] }}</span>
       </div>
+      <button type="button" class="btn-ghost btn-ghost-icon" id="theme-toggle"
+              aria-label="Cambiar a modo oscuro" title="Cambiar entre modo claro y oscuro"
+              onclick="makerosToggleTheme(this)">
+        <svg class="icon" aria-hidden="true">
+          <use href="/static/vendor/feather-sprite.svg#moon" id="theme-toggle-icon"/>
+        </svg>
+      </button>
       <form action="/logout" method="post">
-        <button type="submit" class="btn-ghost" title="Cerrar sesión">Salir</button>
+        <button type="submit" class="btn-ghost btn-logout" title="Cerrar sesión"
+                aria-label="Cerrar sesión">
+          <svg class="icon" aria-hidden="true">
+            <use href="/static/vendor/feather-sprite.svg#log-out"/>
+          </svg>
+        </button>
       </form>
     </div>
     {% endif %}
   </aside>
+  {% endif %}
 
-  <main class="content" id="contenido">
+  <main class="content{% if panel %} content-panel{% endif %}" id="contenido">
     {% block content %}{% endblock %}
   </main>
+
+  <dialog id="makeros-modal" class="makeros-modal" aria-labelledby="makeros-modal-title">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="makeros-modal-title" class="modal-title"></h2>
+        <button type="button" class="modal-close" onclick="makerosCloseModal()"
+                aria-label="Cerrar" title="Cerrar">
+          <svg class="icon" aria-hidden="true"><use href="/static/vendor/feather-sprite.svg#x"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="makeros-modal-body">
+        <p class="modal-loading">Cargando…</p>
+      </div>
+    </div>
+  </dialog>
+  <button type="button" class="brain-fab" onclick="makerosToggleBrain()"
+          aria-label="Ver el grafo del laboratorio" title="Grafo del laboratorio">
+    <svg class="icon" aria-hidden="true"><use href="/static/vendor/feather-sprite.svg#share-2"/></svg>
+  </button>
+  <div class="brain-popup" id="brain-popup" hidden>
+    <div class="brain-popup-head">
+      <span class="modal-title">Grafo del laboratorio</span>
+      <div class="brain-legend">
+        {% for slug, c in collections.items() %}
+        {% if slug not in ("people", "exhibits") %}
+        <span class="brain-legend-item"><span class="brain-dot brain-{{ slug }}"></span>{{ c["label"] }}</span>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <button type="button" class="modal-close" onclick="makerosToggleBrain()"
+              aria-label="Cerrar grafo" title="Cerrar">
+        <svg class="icon" aria-hidden="true"><use href="/static/vendor/feather-sprite.svg#x"/></svg>
+      </button>
+    </div>
+    <canvas id="brain-canvas" class="brain-canvas"></canvas>
+    <div class="brain-resize" id="brain-resize"
+         title="Arrastra para cambiar el tamaño" aria-hidden="true"></div>
+  </div>
 </body>
 </html>

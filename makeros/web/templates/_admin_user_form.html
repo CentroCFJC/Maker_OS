@@ -1,0 +1,24 @@
+<span data-modal-title hidden>Añadir usuario</span>
+<form class="modal-form"
+      hx-post="/admin/usuarios"
+      hx-target="#makeros-modal-body" hx-swap="innerHTML">
+  {% if error %}<p class="modal-error">{{ error }}</p>{% endif %}
+  <label>Usuario
+    <input type="text" name="username" value="{{ username }}" required autofocus>
+  </label>
+  <label>Nombre visible
+    <input type="text" name="display_name" value="{{ display_name }}">
+  </label>
+  <label>Contraseña (mínimo 8 caracteres)
+    <input type="password" name="password" minlength="8" required>
+  </label>
+  <label>Rol
+    <select name="role">
+      {% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+    </select>
+  </label>
+  <div class="modal-actions">
+    <button type="button" class="btn-ghost" onclick="makerosCloseModal()">Cancelar</button>
+    <button type="submit" class="btn-primary">Crear usuario</button>
+  </div>
+</form>

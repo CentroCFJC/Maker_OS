@@ -1,0 +1,22 @@
+<span data-modal-title hidden>Nueva nota privada</span>
+<form class="modal-form"
+      hx-post="/notas/nuevo"
+      hx-target="#makeros-modal-body" hx-swap="innerHTML">
+  {% if error %}<p class="modal-error">{{ error }}</p>{% endif %}
+  <label>Título
+    <input type="text" name="title" required autofocus>
+  </label>
+  <label>Carpeta (opcional: ideas, proyectos/ideas…)
+    <input type="text" name="carpeta" value="{{ folder }}" placeholder="raíz de tus notas">
+  </label>
+  <label>Etiquetas (separadas por comas)
+    <input type="text" name="tags" placeholder="idea, pcb, referencia">
+  </label>
+  <label>Contenido (Markdown, opcional)
+    <textarea name="cuerpo" rows="4" placeholder="Puedes dejarlo vacío y escribir con bloques después."></textarea>
+  </label>
+  <div class="modal-actions">
+    <button type="button" class="btn-ghost" onclick="makerosCloseModal()">Cancelar</button>
+    <button type="submit" class="btn-primary">Crear nota</button>
+  </div>
+</form>

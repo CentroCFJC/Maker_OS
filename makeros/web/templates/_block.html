@@ -1,5 +1,5 @@
 {% for b in blocks %}
-<div class="block" id="block-{{ b["i"] }}">
+<div class="block" id="block-{{ b["i"] }}" data-page-url="{{ page_url }}">
   {% if user and user["role"] != "viewer" %}
   <details class="block-menu">
     <summary title="Opciones del bloque" aria-label="Opciones del bloque">
@@ -24,7 +24,8 @@
       </form>
       <p class="menu-label">Añadir debajo</p>
       {% for tipo, label in block_types.items() %}
-      <form method="post" action="{{ page_url }}/bloques/nuevo">
+      <form hx-post="{{ page_url }}/bloques/nuevo"
+            hx-target="#block-{{ b["i"] }}" hx-swap="afterend">
         <input type="hidden" name="despues" value="{{ b["i"] }}">
         <input type="hidden" name="tipo" value="{{ tipo }}">
         <button type="submit" class="menu-item menu-add">
@@ -41,6 +42,7 @@
     </div>
   </details>
   {% endif %}
-  <div class="block-content">{{ b["html"] | safe }}</div>
+  <div class="block-content" data-edit-url="{{ page_url }}/bloques/{{ b["i"] }}/editar"
+       title="Clic para editar">{{ b["html"] | safe }}</div>
 </div>
 {% endfor %}

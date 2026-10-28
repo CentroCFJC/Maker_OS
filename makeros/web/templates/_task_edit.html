@@ -1,0 +1,44 @@
+<span data-modal-title hidden>Editar tarea</span>
+<form class="modal-form"
+      hx-post="/tasks/{{ page_path }}/editar"
+      hx-target="#makeros-modal-body" hx-swap="innerHTML">
+  {% if error %}<p class="modal-error">{{ error }}</p>{% endif %}
+  <label>Título
+    <input type="text" name="title" value="{{ meta.get("title", "") }}" required>
+  </label>
+  <label>Estado
+    <select name="status">
+      {% for value, label in task_status_labels.items() %}
+      <option value="{{ value }}"{% if meta.get("status") == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Asignada a
+    <select name="assignee">
+      <option value="">(sin asignar)</option>
+      {% for person in people %}
+      <option value="{{ person.slug }}"{% if meta.get("assignee") == person.slug %} selected{% endif %}>
+        {{ person.title }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Prioridad
+    <select name="priority">
+      <option value="">(sin definir)</option>
+      {% for value, label in priorities.items() %}
+      <option value="{{ value }}"{% if meta.get("priority") == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Vencimiento
+    <input type="date" name="due" value="{{ meta.get("due", "") }}">
+  </label>
+  <label>Proyecto (slug, opcional)
+    <input type="text" name="project" value="{{ meta.get("project", "") }}">
+  </label>
+  <div class="modal-actions">
+    <a class="btn-ghost" href="/tasks/{{ page_path }}">Abrir la página</a>
+    <button type="button" class="btn-ghost" onclick="makerosCloseModal()">Cancelar</button>
+    <button type="submit" class="btn-primary">Guardar</button>
+  </div>
+</form>

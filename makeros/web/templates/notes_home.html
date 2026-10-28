@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Mis notas{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / Mis notas{% if folder_path %} / {{ folder_path }}{% endif %}</p>
+  <div class="page-header-row">
+    <h1 class="page-title-with-icon">
+      {{ icon("lock") }}
+      <span>{% if folder_path %}{{ folder_path.rsplit("/", 1)[-1] }}{% else %}Mis notas{% endif %}</span>
+    </h1>
+    <div class="header-actions">
+      <button type="button" class="btn-primary"
+              onclick="makerosOpenModal('/notas/nuevo{% if folder_path %}?carpeta={{ folder_path }}{% endif %}')">
+        + Nueva nota</button>
+      <details class="icon-picker">
+        <summary>{{ icon("folder-plus") }}<span>Nueva carpeta</span></summary>
+        <form method="post" action="/notas/carpeta" class="icon-grid-form vault-newfolder-form">
+          <label>Ruta de la carpeta (puede anidarse: ideas/proyectos)
+            <input name="ruta" placeholder="carpeta/subcarpeta" required>
+          </label>
+          <button class="btn-primary" type="submit">Crear carpeta</button>
+        </form>
+      </details>
+    </div>
+  </div>
+  <p class="page-subtitle">Privadas: solo tú las ves. Viven fuera del repositorio compartido.</p>
+</header>
+
+{% if tags %}
+<div class="chip-row tag-filter notes-tag-filter" data-filter-scope=".notes-grid" aria-label="Filtrar por etiquetas">
+  <button type="button" class="filter-chip active" data-tag="">Todas</button>
+  {% for tag in tags %}
+  <button type="button" class="filter-chip" data-tag="{{ tag }}">{{ tag }}</button>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if scan["folders"] %}
+<div class="notes-folders">
+  {% for f in scan["folders"] %}
+  <a class="note-folder" href="/notas/{{ f["path"] }}">
+    {{ icon("folder") }}
+    <span class="note-folder-name">{{ f["name"] }}</span>
+    <span class="count-pill">{{ f["count"] }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card-grid notes-grid">
+  {% for note in scan["notes"] %}
+  <a class="item-card note-card tagged-card" href="/notas/{{ note["path"] }}" data-tags="{{ note["tags"] | join(',') }}">
+    <div class="card-head">
+      <span class="card-icon">{{ icon("file-text", cls="icon icon-lg") }}</span>
+    </div>
+    <span class="card-title">{{ note["title"] }}</span>
+    {% if note["tags"] %}
+    <div class="chip-row">
+      {% for tag in note["tags"] %}<span class="page-tag">{{ tag }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    <span class="card-meta">actualizada {{ note["updated"] }}</span>
+  </a>
+  {% else %}
+  <p class="item-empty">Sin notas aquí todavía. Crea la primera.</p>
+  {% endfor %}
+</div>
+
+{% endblock %}

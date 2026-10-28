@@ -1,0 +1,23 @@
+<article class="assistant-answer">
+  {% if answer_html %}
+  <div class="assistant-text">{{ answer_html | safe }}</div>
+  {% elif offline_msg %}
+  <p class="assistant-offline">{{ offline_msg }}</p>
+  {% endif %}
+  {% if sources %}
+  <div class="assistant-sources">
+    <span class="assistant-sources-label">Fuentes:</span>
+    {% for s in sources %}
+    <a class="filter-chip" href="/{{ s.path }}">{{ s.title }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if answer and user and user["role"] in ("admin", "member") %}
+  <form class="assistant-save" method="post" action="/asistente/guardar">
+    <input type="hidden" name="respuesta" value="{{ answer }}">
+    <input name="ruta" placeholder="wiki/guia-respuesta" required
+           aria-label="Ruta de la nueva página">
+    <button class="btn-ghost" type="submit">Guardar como página</button>
+  </form>
+  {% endif %}
+</article>

@@ -5,6 +5,10 @@ services:
     environment:
       # Set this in .env (see .env.example) — required in production.
       MAKEROS_SECRET_KEY: ${MAKEROS_SECRET_KEY:?set MAKEROS_SECRET_KEY in .env}
+      # External address and cookie mode for the lab deployment
+      # (HTTP over IP: leave both empty; HTTPS via tailscale serve: set both).
+      MAKEROS_BASE_URL: ${MAKEROS_BASE_URL:-}
+      MAKEROS_COOKIE_SECURE: ${MAKEROS_COOKIE_SECURE:-0}
     volumes:
       - makeros-data:/data
       - ./content:/data/content

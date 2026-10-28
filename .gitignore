@@ -20,3 +20,7 @@ private/
 
 # OS
 .DS_Store
+
+# make serve runtime
+.makeros.pid
+.makeros.log

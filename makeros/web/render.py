@@ -16,8 +16,39 @@ _md.enable(["table", "strikethrough"])
 
 _WIKILINK = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 
+# Image sizes: markdown-it renders `![alt|grande](url)` with the size
+# token inside alt; post-processing turns it into a classed <img>.
+_IMG_TAG = re.compile(r"<img([^>]*)>")
+_ALT_ATTR = re.compile(r'alt="([^"]*)"')
+SIZE_CLASS = {"pequena": "img-pequena", "mediana": "img-mediana",
+              "grande": "img-grande", "completa": "img-completa"}
+
 # Obsidian-style callouts: the first line of a blockquote is `[!TYPE]`.
 _CALLOUT_HEAD = re.compile(r"^>\s*\[!([A-Za-z]+)\]\s*(.*)$")
+
+
+def _size_images(html: str) -> str:
+    """`![texto|mediana](url)` -> <img class="img-mediana" alt="texto">."""
+
+    def repl(match: re.Match[str]) -> str:
+        attrs = match.group(1)
+        alt_m = _ALT_ATTR.search(attrs)
+        if alt_m is None or "|" not in alt_m.group(1):
+            return match.group(0)
+        text, _, token = alt_m.group(1).rpartition("|")
+        token = token.strip().lower().replace("\u00fa", "u")
+        if token in SIZE_CLASS:
+            attrs = attrs[: alt_m.start(1)] + text.strip() + attrs[alt_m.end(1):]
+            return f'<img class="{SIZE_CLASS[token]}"{attrs}>'
+        if token.isdigit() and 5 <= int(token) <= 100:
+            attrs = attrs[: alt_m.start(1)] + text.strip() + attrs[alt_m.end(1):]
+            pct = int(token)
+            return (
+                f'<img class="img-pct" style="width:{pct}%;max-width:{pct}%"{attrs}>'
+            )
+        return match.group(0)
+
+    return _IMG_TAG.sub(repl, html)
 
 
 def _render_callout(text: str) -> str:
@@ -52,4 +83,4 @@ def render_markdown(body: str) -> str:
     stripped = body.strip()
     if stripped.startswith(">") and _CALLOUT_HEAD.match(stripped.split("\n", 1)[0]):
         return _render_callout(stripped)
-    return _md.render(_WIKILINK.sub(repl, body))
+    return _size_images(_md.render(_WIKILINK.sub(repl, body)))

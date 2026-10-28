@@ -82,6 +82,8 @@ def collection_items(
             "status": str(meta.get("status") or ""),
             "project": str(meta.get("project") or ""),
             "assignee": str(meta.get("assignee") or ""),
+            "priority": str(meta.get("priority") or ""),
+            "tags": meta.get("tags", []) if isinstance(meta.get("tags", []), list) else [],
             "banner": str(meta.get("banner") or ""),
             "extract": extract(row["body"] or ""),
             "vencido": bool(due and to_day(due) < date.today()),

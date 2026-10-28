@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Asistente{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / Asistente</p>
+  <div class="page-header-row">
+    <h1 class="page-title-with-icon">
+      {{ icon("cpu") }}
+      <span>Asistente</span>
+    </h1>
+  </div>
+  <p class="page-subtitle">Pregunta sobre la documentación del laboratorio.
+    Busca en todas las páginas y responde con el modelo local.</p>
+</header>
+
+<div class="assistant-card">
+  <form hx-post="/asistente/preguntar" hx-target="#assistant-answer"
+        hx-swap="innerHTML" hx-indicator="#assistant-busy" class="assistant-form">
+    <input name="pregunta" type="text" required autocomplete="off"
+           placeholder="¿Cómo se configura la impresora del taller?">
+    <button class="btn-primary" type="submit">Preguntar</button>
+  </form>
+  <p id="assistant-busy" class="htmx-indicator assistant-busy">Buscando en la documentación…</p>
+
+  {% if not llm_ready %}
+  <div class="callout callout-aviso">
+    <p class="callout-title">Modelo sin configurar</p>
+    <p>Conecta LM Studio desde el panel de administración (Integraciones).
+      Sin modelo, el asistente queda apagado; el resto de la plataforma funciona igual.</p>
+  </div>
+  {% endif %}
+
+  <div id="assistant-answer" class="assistant-answer-zone" aria-live="polite"></div>
+</div>
+{% endblock %}

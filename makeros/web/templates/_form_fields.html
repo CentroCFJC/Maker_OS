@@ -1,0 +1,68 @@
+{% macro render_form_fields(form_fields, defaults, people, cat_labels) %}
+{% for field in form_fields %}
+{% if field["kind"] == "textarea" %}
+<label>{{ field["label"] }}
+  <textarea name="{{ field["name"] }}" rows="8"
+            placeholder="Puedes dejarlo vacío y usar bloques después."></textarea>
+</label>
+{% elif field["kind"] == "select" %}
+<label>{{ field["label"] }}
+  <select name="{{ field["name"] }}">
+    <option value="">(valor de la plantilla)</option>
+    {% for value, label in field["options"].items() %}
+    <option value="{{ value }}">{{ label }}</option>
+    {% endfor %}
+  </select>
+</label>
+{% elif field["kind"] == "people" %}
+<label>{{ field["label"] }}
+  <select name="{{ field["name"] }}">
+    <option value="">(sin asignar)</option>
+    {% for person in people %}
+    <option value="{{ person.slug }}">{{ person.title }}</option>
+    {% endfor %}
+  </select>
+</label>
+{% elif field["kind"] == "event_category" %}
+<label>{{ field["label"] }}
+  <select name="category" aria-label="Categoría del evento">
+    {% for cid, label in cat_labels.items() %}
+    <option value="{{ cid }}"{% if cid == "reunion" %} selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</label>
+{% elif field["kind"] == "date" %}
+<label>{{ field["label"] }}
+  <input type="date" name="{{ field["name"] }}" value="{{ defaults.get(field["name"], "") }}">
+</label>
+{% elif field["kind"] == "datetime" %}
+<label>{{ field["label"] }}
+  <input type="datetime-local" name="{{ field["name"] }}"
+         value="{{ defaults.get(field["name"], "") }}">
+</label>
+{% elif field["kind"] == "url" %}
+<label>{{ field["label"] }}
+  <input type="url" name="{{ field["name"] }}" placeholder="https://…">
+</label>
+{% elif field["kind"] == "banner" %}
+<fieldset class="banner-create">
+  <legend>{{ field["label"] }}</legend>
+  <label>Subir imagen del equipo
+    <input type="file" name="banner_file"
+           accept="image/png,image/jpeg,image/webp,image/gif">
+  </label>
+  <label>O pegar URL de imagen
+    <input type="url" name="banner_url" placeholder="https://…">
+  </label>
+</fieldset>
+{% else %}
+<label>{{ field["label"] }}
+  <input type="text" name="{{ field["name"] }}"
+         {% if field.get("required") %}required{% endif %}
+         value="{{ defaults.get(field["name"], "") }}"
+         placeholder="{{ field.get("placeholder", "") }}"
+         {% if loop.first %}autofocus{% endif %}>
+</label>
+{% endif %}
+{% endfor %}
+{% endmacro %}

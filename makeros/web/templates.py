@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
+from jinja2 import ChainableUndefined
 from markupsafe import Markup
 
 from .blocks import BLOCK_ICONS, BLOCK_SEEDS, BLOCK_TYPES
@@ -12,6 +13,9 @@ from .icons import SPRITE_URL
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# A missing context key renders as empty instead of blowing up the page
+# (e.g. a hot-reloaded template while the process predates a feature).
+templates.env.undefined = ChainableUndefined
 
 
 def icon(name: str | None, cls: str = "icon") -> str:

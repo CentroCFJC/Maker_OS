@@ -12,55 +12,14 @@
 
 <form class="new-page-form" method="post" action="/{{ collection_slug }}/nuevo"
       enctype="multipart/form-data">
-  {% for field in form_fields %}
-  {% if field["kind"] == "textarea" %}
-  <label>{{ field["label"] }}
-    <textarea name="{{ field["name"] }}" rows="8"
-              placeholder="Puedes dejarlo vacío y usar bloques después."></textarea>
-  </label>
-  {% elif field["kind"] == "select" %}
-  <label>{{ field["label"] }}
-    <select name="{{ field["name"] }}">
-      <option value="">(valor de la plantilla)</option>
-      {% for value, label in field["options"].items() %}
-      <option value="{{ value }}">{{ label }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% elif field["kind"] == "date" %}
-  <label>{{ field["label"] }}
-    <input type="date" name="{{ field["name"] }}" value="{{ defaults.get(field["name"], "") }}">
-  </label>
-  {% elif field["kind"] == "datetime" %}
-  <label>{{ field["label"] }}
-    <input type="datetime-local" name="{{ field["name"] }}"
-           value="{{ defaults.get(field["name"], "") }}">
-  </label>
-  {% elif field["kind"] == "url" %}
-  <label>{{ field["label"] }}
-    <input type="url" name="{{ field["name"] }}" placeholder="https://…">
-  </label>
-  {% elif field["kind"] == "banner" %}
-  <fieldset class="banner-create">
-    <legend>{{ field["label"] }}</legend>
-    <label>Subir imagen del equipo
-      <input type="file" name="banner_file"
-             accept="image/png,image/jpeg,image/webp,image/gif">
-    </label>
-    <label>O pegar URL de imagen
-      <input type="url" name="banner_url" placeholder="https://…">
-    </label>
-  </fieldset>
-  {% else %}
-  <label>{{ field["label"] }}
-    <input type="text" name="{{ field["name"] }}"
-           {% if field.get("required") %}required{% endif %}
-           value="{{ defaults.get(field["name"], "") }}"
-           placeholder="{{ field.get("placeholder", "") }}"
-           {% if loop.first %}autofocus{% endif %}>
+  {% if collection_slug in ("wiki", "research", "inventory") %}
+  <label>Carpeta (opcional: guias/impresion — se crea si no existe)
+    <input type="text" name="ruta" value="{{ defaults.get("ruta", "") }}"
+           placeholder="raíz de la wiki">
   </label>
   {% endif %}
-  {% endfor %}
+  {% from "_form_fields.html" import render_form_fields %}
+  {{ render_form_fields(form_fields, defaults, people, cat_labels) }}
   <button type="submit" class="btn-primary">Crear página</button>
 </form>
 {% endblock %}

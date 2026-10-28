@@ -1,0 +1,19 @@
+<span data-modal-title hidden>Nueva página en {{ collection_label }}</span>
+<form class="modal-form"
+      hx-post="/{{ collection_slug }}/nuevo"
+      hx-target="#makeros-modal-body" hx-swap="innerHTML"
+      enctype="multipart/form-data">
+  {% if error %}<p class="modal-error">{{ error }}</p>{% endif %}
+  {% if collection_slug in ("wiki", "research", "inventory") %}
+  <label>Carpeta (opcional: guias/impresion — se crea si no existe)
+    <input type="text" name="ruta" value="{{ defaults.get("ruta", "") }}"
+           placeholder="raíz de la wiki">
+  </label>
+  {% endif %}
+  {% from "_form_fields.html" import render_form_fields %}
+  {{ render_form_fields(form_fields, defaults, people, cat_labels) }}
+  <div class="modal-actions">
+    <button type="button" class="btn-ghost" onclick="makerosCloseModal()">Cancelar</button>
+    <button type="submit" class="btn-primary">Crear</button>
+  </div>
+</form>

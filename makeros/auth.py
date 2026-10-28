@@ -64,5 +64,62 @@ def get_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
+def set_display_name(conn: sqlite3.Connection, user_id: int, display_name: str) -> None:
+    conn.execute("UPDATE users SET display_name = ? WHERE id = ?", (display_name, user_id))
+    conn.commit()
+
+
+def set_avatar(conn: sqlite3.Connection, user_id: int, media_path: str) -> None:
+    """Store the /media/ path of the user's picture ("" removes it)."""
+    conn.execute("UPDATE users SET avatar = ? WHERE id = ?", (media_path, user_id))
+    conn.commit()
+
+
 def count_users(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+def list_users(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """All accounts, oldest first (never includes password hashes in use)."""
+    return conn.execute(
+        "SELECT id, username, display_name, role, created_at FROM users ORDER BY id"
+    ).fetchall()
+
+
+def _admin_count(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0]
+
+
+def update_role(conn: sqlite3.Connection, user_id: int, role: str) -> None:
+    """Change an account's role; the last admin cannot be demoted."""
+    if role not in ROLES:
+        raise ValueError(f"role must be one of {ROLES}")
+    row = get_user(conn, user_id)
+    if row is None:
+        raise LookupError("user not found")
+    if row["role"] == "admin" and role != "admin" and _admin_count(conn) == 1:
+        raise PermissionError("cannot demote the only admin")
+    conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+    conn.commit()
+
+
+def set_password(conn: sqlite3.Connection, user_id: int, password: str) -> None:
+    """Admin-driven password reset (Argon2 hash, never plaintext)."""
+    if get_user(conn, user_id) is None:
+        raise LookupError("user not found")
+    conn.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (hash_password(password), user_id),
+    )
+    conn.commit()
+
+
+def delete_user(conn: sqlite3.Connection, user_id: int) -> None:
+    """Remove an account; the last admin cannot be deleted."""
+    row = get_user(conn, user_id)
+    if row is None:
+        raise LookupError("user not found")
+    if row["role"] == "admin" and _admin_count(conn) == 1:
+        raise PermissionError("cannot delete the only admin")
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()

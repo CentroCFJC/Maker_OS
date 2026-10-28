@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Administración{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / Administración</p>
+  <div class="page-header-row">
+    <h1>Administración</h1>
+  </div>
+</header>
+
+<nav class="admin-tabs" role="tablist" aria-label="Secciones de administración">
+  <button type="button" class="admin-tab-button" role="tab" data-tab="usuarios"
+          onclick="makerosAdminTab('usuarios')">Usuarios</button>
+  <button type="button" class="admin-tab-button" role="tab" data-tab="apariencia"
+          onclick="makerosAdminTab('apariencia')">Apariencia</button>
+  <button type="button" class="admin-tab-button" role="tab" data-tab="contenido"
+          onclick="makerosAdminTab('contenido')">Contenido</button>
+  <button type="button" class="admin-tab-button" role="tab" data-tab="categorias"
+          onclick="makerosAdminTab('categorias')">Categorías</button>
+  <button type="button" class="admin-tab-button" role="tab" data-tab="personas"
+          onclick="makerosAdminTab('personas')">Personas</button>
+  <button type="button" class="admin-tab-button" role="tab" data-tab="integracion"
+          onclick="makerosAdminTab('integracion')">Integraciones</button>
+  <button type="button" class="admin-tab-button" role="tab" data-tab="sistema"
+          onclick="makerosAdminTab('sistema')">Sistema</button>
+</nav>
+
+<section class="admin-tab" data-tab="usuarios" role="tabpanel">
+  <h2>Usuarios</h2>
+  <table class="admin-table">
+    <thead>
+      <tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Desde</th><th>Acciones</th></tr>
+    </thead>
+    <tbody>
+      {% for row in users %}
+      <tr>
+        <td class="admin-username">
+          {% if row["avatar"] %}
+          <img class="avatar" src="/media/{{ row["avatar"] }}" alt="" style="width:22px;height:22px;">
+          {% else %}
+          <span class="avatar" style="width:22px;height:22px;font-size:11px;">
+            {{ row["display_name"][:1] | upper }}</span>
+          {% endif %}
+          {{ row["username"] }}
+        </td>
+        <td>{{ row["display_name"] }}</td>
+        <td>
+          <form class="admin-inline" method="post"
+                action="/admin/usuarios/{{ row["id"] }}/rol">
+            <select name="role" aria-label="Rol de {{ row["username"] }}">
+              {% for r in roles %}
+              <option value="{{ r }}"{% if r == row["role"] %} selected{% endif %}>{{ r }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn-ghost" type="submit">Guardar</button>
+          </form>
+        </td>
+        <td class="admin-muted">{{ row["created_at"] }}</td>
+        <td>
+          <div class="admin-actions">
+            <form class="admin-inline" method="post"
+                  action="/admin/usuarios/{{ row["id"] }}/clave">
+              <input type="password" name="password" placeholder="Nueva contraseña"
+                     minlength="8" aria-label="Nueva contraseña para {{ row["username"] }}" required>
+              <button class="btn-ghost" type="submit"
+                      title="Establecer una contraseña nueva (mínimo 8 caracteres)">Restablecer</button>
+            </form>
+            <form method="post" action="/admin/usuarios/{{ row["id"] }}/eliminar">
+              <button class="btn-ghost admin-danger" type="submit"
+                      {% if row["id"] == user["id"] %}disabled
+                      title="No puedes eliminarte a ti mismo"{% endif %}>Eliminar</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3 class="admin-sub">Añadir usuario</h3>
+  <button type="button" class="btn-primary"
+          onclick="makerosOpenModal('/admin/usuarios/nuevo?fragmento=1')">+ Añadir usuario</button>
+</section>
+
+<section class="admin-tab" data-tab="apariencia" role="tabpanel">
+  <h2>Acento</h2>
+  <div class="theme-options" role="group" aria-label="Color de acento">
+    <button type="button" class="theme-option{% if theme_accent == 'rojo' %} active{% endif %}"
+            data-theme-accent="rojo" aria-pressed="{{ 'true' if theme_accent == 'rojo' else 'false' }}"
+            onclick="makerosApplyTheme('accent', 'rojo', this)">
+      <span class="theme-swatch" style="background: #c92038;"></span>Rojo
+    </button>
+    <button type="button" class="theme-option{% if theme_accent == 'indigo' %} active{% endif %}"
+            data-theme-accent="indigo" aria-pressed="{{ 'true' if theme_accent == 'indigo' else 'false' }}"
+            onclick="makerosApplyTheme('accent', 'indigo', this)">
+      <span class="theme-swatch" style="background: #29265b;"></span>Índigo
+    </button>
+    <button type="button" class="theme-option{% if theme_accent == 'naranja' %} active{% endif %}"
+            data-theme-accent="naranja" aria-pressed="{{ 'true' if theme_accent == 'naranja' else 'false' }}"
+            onclick="makerosApplyTheme('accent', 'naranja', this)">
+      <span class="theme-swatch" style="background: #f4991f;"></span>Naranja
+    </button>
+  </div>
+
+  <h3 class="admin-sub">Fondo</h3>
+  <div class="theme-options" role="group" aria-label="Estilo de fondo">
+    <button type="button" class="theme-option{% if theme_bg == 'blanco' %} active{% endif %}"
+            data-theme-bg="blanco" aria-pressed="{{ 'true' if theme_bg == 'blanco' else 'false' }}"
+            onclick="makerosApplyTheme('bg', 'blanco', this)">
+      <span class="theme-swatch theme-swatch-bg" style="background: var(--bg);"></span>Plano
+    </button>
+    <button type="button" class="theme-option{% if theme_bg == 'suave' %} active{% endif %}"
+            data-theme-bg="suave" aria-pressed="{{ 'true' if theme_bg == 'suave' else 'false' }}"
+            onclick="makerosApplyTheme('bg', 'suave', this)">
+      <span class="theme-swatch theme-swatch-bg"
+            style="background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 30%, var(--bg)), var(--bg));"></span>Difuminado
+    </button>
+    <button type="button" class="theme-option{% if theme_bg == 'cuadricula' %} active{% endif %}"
+            data-theme-bg="cuadricula" aria-pressed="{{ 'true' if theme_bg == 'cuadricula' else 'false' }}"
+            onclick="makerosApplyTheme('bg', 'cuadricula', this)">
+      <span class="theme-swatch theme-swatch-bg"
+            style="background-color: var(--bg); background-image: linear-gradient(color-mix(in srgb, var(--accent) 30%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--accent) 30%, transparent) 1px, transparent 1px); background-size: 7px 7px;"></span>Cuadrícula
+    </button>
+  </div>
+  <p class="admin-muted">Se aplica al instante y vale para toda la instancia. El modo
+    claro u oscuro lo elige cada persona con el interruptor del menú lateral.</p>
+  <p class="theme-status" id="theme-status" aria-live="polite"></p>
+</section>
+
+<section class="admin-tab" data-tab="personas" role="tabpanel">
+  <h2>Personas</h2>
+  <p class="admin-muted">Las personas del laboratorio. Se usan para asignar
+    tareas, proyectos y eventos del calendario. Cada persona tiene su página
+    en Markdown, como el resto del contenido.</p>
+  <ul class="item-list">
+    {% for person in people %}
+    <li class="item-row">
+      <a class="item-title" href="/people/{{ person.slug }}">{{ person.title }}</a>
+      <span class="item-meta">/people/{{ person.slug }}</span>
+    </li>
+    {% else %}
+    <li class="item-row"><span class="item-meta">Todavía no hay personas.</span></li>
+    {% endfor %}
+  </ul>
+  <h3 class="admin-sub">Añadir persona</h3>
+  <form class="admin-form" method="post" action="/people/nuevo">
+    <label for="person-title">Nombre</label>
+    <input id="person-title" name="title" required aria-label="Nombre de la persona">
+    <label for="person-username">Usuario (username, opcional)</label>
+    <input id="person-username" name="username" aria-label="Usuario de la persona">
+    <label for="person-body">Skills y equipos a cargo (Markdown, opcional)</label>
+    <textarea id="person-body" name="body" rows="3"></textarea>
+    <button class="btn-primary" type="submit">Crear persona</button>
+  </form>
+</section>
+
+<section class="admin-tab" data-tab="contenido" role="tabpanel">
+  <h2>Plantillas de creación</h2>
+  <p class="admin-muted">Contenido con el que nacen las páginas nuevas de cada sección:</p>
+  <ul class="item-list">
+    {% for slug, c in collections.items() %}
+    {% if slug not in ("people", "exhibits") %}
+    <li class="item-row">
+      <a class="item-title" href="/{{ slug }}/plantilla">{{ c["label"] }}</a>
+      <span class="item-meta">/templates/ · {{ counts.get(slug, 0) }} páginas</span>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="admin-tab" data-tab="categorias" role="tabpanel">
+  <h2>Categorías de eventos</h2>
+  <p class="admin-muted">Colorean los eventos del calendario y viajan con ellos
+    a Google Calendar (propiedades privadas del evento).</p>
+  <ul class="item-list category-list">
+    {% for c in event_categories %}
+    <li class="item-row">
+      <span class="cat-badge"
+            style="background: color-mix(in srgb, {{ c.color }} 18%, var(--card)); color: color-mix(in srgb, {{ c.color }} 85%, var(--text-title));">
+        {{ c.label }}</span>
+      <span class="item-meta">{{ c.id }}</span>
+      <form method="post" action="/admin/categorias/{{ c.id }}/eliminar">
+        <button class="btn-ghost admin-danger" type="submit">Eliminar</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <h3 class="admin-sub">Añadir categoría</h3>
+  <form class="admin-form" method="post" action="/admin/categorias">
+    <label for="cat-label">Nombre</label>
+    <input id="cat-label" name="label" placeholder="p. ej. Social" required
+           aria-label="Nombre de la categoría">
+    <label for="cat-color">Color</label>
+    <select id="cat-color" name="color" aria-label="Color de la categoría">
+      {% for hex in category_palette %}
+      <option value="{{ hex }}">{{ hex }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn-primary" type="submit">Crear</button>
+  </form>
+</section>
+
+<section class="admin-tab" data-tab="integracion" role="tabpanel">
+  <h2>Nombre del sitio</h2>
+  <form class="admin-form" method="post" action="/admin/config">
+    <label for="site-name">Nombre</label>
+    <input id="site-name" name="site_name" value="{{ site_name }}" aria-label="Nombre del sitio">
+    <button class="btn-primary" type="submit">Guardar</button>
+  </form>
+  <p class="admin-muted">Aparece en la portada y en la pantalla de entrada.
+    Déjalo vacío para volver al valor por defecto.</p>
+
+  <h3 class="admin-sub">Google Calendar</h3>
+  {% if gcal_error %}
+  <p class="error">Google: {{ gcal_error }}</p>
+  {% endif %}
+  {% if not gcal_connected %}
+  <form class="admin-form" method="post" action="/google/credenciales">
+    <label for="gcal-client-id">ID de cliente</label>
+    <input id="gcal-client-id" name="client_id" value="{{ gcal_client_id }}"
+           placeholder="…apps.googleusercontent.com" aria-label="ID de cliente de Google">
+    <label for="gcal-client-secret">Secreto de cliente</label>
+    <input id="gcal-client-secret" type="password" name="client_secret"
+           placeholder="GOCSPX-…" aria-label="Secreto de cliente de Google">
+    <button class="btn-ghost" type="submit">Guardar credenciales</button>
+  </form>
+  <p class="admin-muted">Están en Google Cloud Console → APIs y servicios →
+    Credenciales, dentro del JSON que descargaste al crear el ID de cliente
+    OAuth. Guardan una vez y listo.</p>
+  {% endif %}
+  {% if not gcal_configured %}
+  <p class="admin-muted">Guarda el ID y el secreto para poder conectar.</p>
+  {% else %}
+    {% if not gcal_connected %}
+    <form class="admin-tool" method="get" action="/google/login">
+      <button class="btn-primary" type="submit">Conectar con Google</button>
+    </form>
+    <p class="admin-muted">Se conecta UN calendario compartido para todo el
+      laboratorio, con sincronización en ambos sentidos. Cada 5 minutos y al
+      pulsar «Sincronizar ahora». Guía: <code>docs/GCALENDAR.md</code>.</p>
+    {% else %}
+    <form class="admin-form" method="post" action="/google/calendario">
+      <label for="gcal-calendar-id">ID del calendario</label>
+      <input id="gcal-calendar-id" name="calendar_id" value="{{ gcal_calendar_id }}"
+             placeholder="p. ej. c-abc123@group.calendar.google.com"
+             aria-label="ID del calendario de Google" required>
+      <button class="btn-primary" type="submit">Guardar</button>
+    </form>
+    <p class="admin-muted">En Google Calendar: ajustes del calendario →
+      «ID del calendario». El guardado lanza una sincronización en
+      segundo plano; luego todo es automático: al entrar al calendario,
+      al crear eventos, y cada pocos minutos.</p>
+    <form class="admin-tool" method="post" action="/google/desconectar">
+      <button class="btn-ghost admin-danger" type="submit">Desconectar</button>
+    </form>
+    {% endif %}
+  {% endif %}
+
+  <h3 class="admin-sub">Asistente local (LM Studio)</h3>
+  <form class="admin-form" method="post" action="/admin/llm">
+    <label for="llm-base-url">Dirección del servidor</label>
+    <input id="llm-base-url" name="base_url" value="{{ llm_base_url }}"
+           placeholder="http://localhost:1234/v1" aria-label="Dirección del servidor LLM">
+    <label for="llm-model">Modelo</label>
+    <input id="llm-model" name="modelo" value="{{ llm_model }}"
+           placeholder="mistral-small-latest" aria-label="Nombre del modelo">
+    <button class="btn-ghost" type="submit">Guardar</button>
+  </form>
+  <p class="admin-muted">Cualquier servidor compatible con la API de OpenAI
+    (LM Studio, Ollama). Déjalo vacío para apagar el asistente; el resto de
+    la plataforma funciona sin él. Se lee la documentación con la búsqueda
+    interna y el modelo responde citando las páginas.</p>
+
+  <h3 class="admin-sub">Canal de calendario (ICS)</h3>
+  <p>Dirección de solo lectura para aplicaciones de calendario:</p>
+  <p><code class="cal-feed-url">{{ feed_url }}</code></p>
+  <form class="admin-tool" method="post" action="/admin/token">
+    <button class="btn-ghost" type="submit"
+            title="Genera un token nuevo; la dirección anterior deja de funcionar">
+      Revocar token y generar otro</button>
+  </form>
+</section>
+
+<section class="admin-tab" data-tab="sistema" role="tabpanel">
+  <h2>Mantenimiento</h2>
+  <p class="admin-muted">Reconstruye el índice de búsqueda desde los archivos Markdown.
+    Útil después de traer cambios con git o de editar archivos a mano.</p>
+  <form class="admin-tool" method="post" action="/admin/reindex">
+    <button class="btn-ghost" type="submit">Reconstruir índice</button>
+  </form>
+</section>
+{% endblock %}

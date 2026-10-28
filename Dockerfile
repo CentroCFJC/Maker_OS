@@ -15,4 +15,6 @@ ENV MAKEROS_CONTENT_DIR=/data/content \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "makeros.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers: behind the Caddy container the app should see the
+# real client address / scheme from X-Forwarded-* headers.
+CMD ["uvicorn", "makeros.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

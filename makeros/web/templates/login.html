@@ -1,19 +1,54 @@
-{% extends "base.html" %}
-{% block title %}MakerOS — Entrar{% endblock %}
-{% block content %}
-<div class="login-card">
-  <img src="/static/img/logo.png" alt="MakerOS" class="login-logo">
-  <h1>Maker<span>OS</span></h1>
-  <p class="tagline">El sistema operativo del laboratorio</p>
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <form method="post" action="/login">
-    <label>Usuario
-      <input type="text" name="username" required autofocus autocomplete="username">
-    </label>
-    <label>Contraseña
-      <input type="password" name="password" required autocomplete="current-password">
-    </label>
-    <button type="submit" class="btn-primary">Entrar</button>
-  </form>
-</div>
-{% endblock %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MakerOS — Entrar</title>
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("makeros-theme");
+        if (!saved) {
+          saved = window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark" : "light";
+        }
+        document.documentElement.dataset.theme = saved;
+      } catch (e) { /* private mode: default light */ }
+    })();
+  </script>
+  <link rel="icon" href="/static/img/logo.png">
+  <link rel="stylesheet" href="/static/css/makeros.css">
+  <script src="/static/js/makeros.js" defer></script>
+</head>
+<body class="login-page" data-accent="{{ theme_accent }}" data-bg="{{ theme_bg }}">
+  <button type="button" class="login-theme-toggle" id="theme-toggle"
+          aria-label="Cambiar a modo oscuro" title="Cambiar entre modo claro y oscuro"
+          onclick="makerosToggleTheme(this)">
+    <svg class="icon" aria-hidden="true">
+      <use href="/static/vendor/feather-sprite.svg#moon" id="theme-toggle-icon"/>
+    </svg>
+  </button>
+
+  <div class="login-card">
+    <img src="/static/img/logo.png" alt="MakerOS" class="login-logo">
+    <h1>Maker<span>OS</span></h1>
+    <p class="tagline">{{ site_name }} — el sistema operativo del laboratorio</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="post" action="/login">
+      <label>Usuario
+        <input type="text" name="username" required autofocus autocomplete="username">
+      </label>
+      <label>Contraseña
+        <input type="password" name="password" required autocomplete="current-password">
+      </label>
+      <button type="submit" class="btn-primary">Entrar</button>
+    </form>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      makerosPaintThemeToggle(document.documentElement.dataset.theme || "light");
+    });
+  </script>
+</body>
+</html>

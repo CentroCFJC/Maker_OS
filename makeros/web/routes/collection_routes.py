@@ -16,55 +16,47 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from ... import frontmatter
-from ...collections import COLLECTIONS, STATUS_FILTERS, STATUS_LABELS
+from ...collections import COLLECTIONS, STATUS_FILTERS, STATUS_LABELS, TASK_STATUSES
 from ...frontmatter import FrontmatterError
 from ...indexer import index_file, remove_document
-from ...ui import set_ui
-from ..blocks import BLOCK_SEEDS, join_blocks, split_blocks
+from ...ui import get_ui, set_ui
+from .. import event_store, vault
+from ..blocks import BLOCK_SEEDS, infer_kind, join_blocks, split_blocks
 from ..calendar import (
     WEEKDAYS_ES,
     build_ics,
     day_map,
+    feed_token_ok,
     fmt_when,
     month_grid,
     month_label,
     parse_month,
     parse_when,
+    rotate_feed_token,
 )
 from ..deps import ConnDep, UserDep, base_ctx, get_settings
-from ..forms import fields_for
+from ..forms import TASK_PRIORITIES, fields_for
+from ..gcal import schedule_sync
 from ..icons import is_valid_icon
 from ..listing import collection_items, project_task_stats
 from ..render import render_markdown
 from ..templates import templates
+from ..uploads import (
+    MAX_UPLOAD_BYTES,
+    UPLOAD_EXTENSIONS,
+    safe_upload_path,
+    uploads_dir,
+)
 
 router = APIRouter()
 
 EDIT_ROLES = ("admin", "member")
-VIEWS = ("lista", "tarjetas", "kanban")
-
-# Page banners: uploaded files land in content/_uploads/ and are served
-# back through /media/. Banners may also be plain remote URLs.
-UPLOAD_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
-MAX_BANNER_BYTES = 5 * 1024 * 1024
-
-
-def _uploads_dir(settings) -> Path:
-    uploads = settings.content_dir / "_uploads"
-    uploads.mkdir(parents=True, exist_ok=True)
-    return uploads
-
-
-def _safe_upload_path(settings, name: str) -> Path | None:
-    """Resolve a /media/ name inside the uploads dir, blocking traversal."""
-    uploads = _uploads_dir(settings).resolve()
-    target = (uploads / name).resolve()
-    if target == uploads or uploads not in target.parents:
-        return None
-    return target
+VIEWS = ("lista", "tarjetas", "kanban", "arbol")
+# Collections whose index page has the folder system (cards + tag filter).
+FOLDER_COLLECTIONS = ("wiki", "research", "inventory")
 
 
 def _collection_or_404(collection: str) -> dict[str, str]:
@@ -112,6 +104,7 @@ def _calendar_response(request: Request, conn, user, info: dict[str, str]):
                 "date": day,
                 "iso": day.isoformat(),
                 "in_month": day.month == month,
+                "weekend": day.weekday() >= 5,
                 "is_today": day == today,
                 "items": items_by_day.get(day, []),
             }
@@ -121,6 +114,19 @@ def _calendar_response(request: Request, conn, user, info: dict[str, str]):
     ]
     prev_m = (datetime(year, month, 1) - timedelta(days=1)).strftime("%Y-%m")
     next_m = (datetime(year, month, 28) + timedelta(days=7)).strftime("%Y-%m")
+    # "Próximamente": everything dated from today on, soonest first.
+    upcoming = [
+        {
+            "path": item.path,
+            "title": item.title,
+            "kind": item.kind,
+            "time": item.time,
+            "date": day.isoformat(),
+        }
+        for day in sorted(items_by_day)
+        if day >= today
+        for item in items_by_day[day]
+    ][:12]
     return templates.TemplateResponse(
         request,
         "calendar.html",
@@ -135,7 +141,7 @@ def _calendar_response(request: Request, conn, user, info: dict[str, str]):
             month_title=month_label(year, month),
             prev_month=prev_m,
             next_month=next_m,
-            feed_url=f"{request.base_url}calendario.ics",
+            upcoming=upcoming,
         ),
     )
 
@@ -163,11 +169,28 @@ async def set_collection_icon(
 
 @router.get("/calendario.ics")
 async def calendar_ics(request: Request, conn: ConnDep, user: UserDep):
-    """ICS feed of all dated events; subscribable from Google Calendar."""
-    if user is None:
-        return RedirectResponse("/login", status_code=303)
+    """ICS feed of all dated events.
+
+    Two access paths: a logged-in session cookie, or `?token=` for
+    calendar clients that cannot log in (Thunderbird, Apple Calendar).
+    401 (not a redirect) so clients surface the auth problem.
+    """
+    token = request.query_params.get("token", "")
+    if user is None and not feed_token_ok(conn, token):
+        return Response("Unauthorized\n", status_code=401, media_type="text/plain")
     ics = build_ics(conn, datetime.now(UTC).replace(microsecond=0))
     return Response(content=ics, media_type="text/calendar; charset=utf-8")
+
+
+@router.post("/calendario/token")
+async def rotate_calendar_token(request: Request, conn: ConnDep, user: UserDep):
+    """Admins can invalidate leaked feed tokens; a new one is generated."""
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403)
+    rotate_feed_token(conn)
+    return RedirectResponse("/calendario", status_code=303)
 
 
 @router.get("/media/{file_path:path}")
@@ -176,7 +199,7 @@ async def media_file(file_path: str, request: Request, user: UserDep):
     if user is None:
         return RedirectResponse("/login", status_code=303)
     settings = get_settings(request)
-    target = _safe_upload_path(settings, file_path)
+    target = safe_upload_path(settings, file_path)
     if target is None or not target.is_file():
         raise HTTPException(status_code=404)
     return FileResponse(target)
@@ -203,11 +226,11 @@ async def set_banner(
         if ext not in UPLOAD_EXTENSIONS:
             raise HTTPException(status_code=400, detail="Formato de imagen no permitido")
         data = await archivo.read()
-        if len(data) > MAX_BANNER_BYTES:
+        if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=400, detail="La imagen supera 5 MB")
         stem = re.sub(r"[^a-z0-9]+", "-", page_path.lower()).strip("-") or "pagina"
         name = f"{stem}-{secrets.token_hex(4)}.{ext}"
-        (_uploads_dir(settings) / name).write_bytes(data)
+        (uploads_dir(settings) / name).write_bytes(data)
         meta["banner"] = f"/media/{name}"
     elif url.strip():
         url = url.strip()
@@ -237,7 +260,7 @@ async def delete_banner(
     file, meta, body = _load_for_edit(settings, collection, page_path)
     banner = meta.pop("banner", None)
     if banner and banner.startswith("/media/"):
-        target = _safe_upload_path(settings, banner[len("/media/"):])
+        target = safe_upload_path(settings, banner[len("/media/"):])
         if target is not None and target.is_file():
             target.unlink()
     frontmatter.write(file, meta, body)
@@ -250,23 +273,46 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
     info = _collection_or_404(collection)
     if user is None:
         return RedirectResponse("/login", status_code=303)
+    # Wiki cards by default; ?vista=arbol keeps the Obsidian tree (DnD).
+    if collection == "wiki" and request.query_params.get("vista") == "arbol":
+        return _vault_response(request, conn, user, info, "")
     if collection == "calendario":
+        # Entering the calendar pulls fresh events in the background
+        # (incremental via Google's sync tokens, so usually cheap).
+        schedule_sync(get_settings(request))
         return _calendar_response(request, conn, user, info)
     # Per-user list/grid choice: a valid ?vista= param wins and is
-    # remembered in a cookie; otherwise the cookie (or "lista") applies.
+    # remembered in a cookie; otherwise the cookie (or "tarjetas") applies.
     vista = request.query_params.get("vista", "")
     if vista in VIEWS:
         remember = vista
     else:
         vista = remember = None
     if vista is None:
-        vista = request.cookies.get("vista", "lista")
-    # Kanban only exists for tasks; everywhere else it falls back to lista.
+        default = "kanban" if collection == "tasks" else "tarjetas"
+        vista = request.cookies.get("vista", default)
+    # Kanban only exists for tasks; everywhere else it falls back to tarjetas.
     if vista == "kanban" and collection != "tasks":
-        vista = "lista"
+        vista = "tarjetas"
     items = collection_items(
         conn, collection, task_stats=project_task_stats(conn) if collection == "projects" else None
     )
+    # Folder system (research, inventory, ...): ?carpeta= scopes the view
+    # to one subtree; folders render as cards on top of the grid.
+    carpeta = request.query_params.get("carpeta", "").strip().strip("/")
+    folders: list[dict] = []
+    tags: list[str] = []
+    if collection in FOLDER_COLLECTIONS:
+        if carpeta and not vault.valid_vault_path(carpeta):
+            raise HTTPException(status_code=400, detail="ruta de carpeta no válida")
+        prefix = f"{collection}/{carpeta}/" if carpeta else f"{collection}/"
+        items = [item for item in items if item["path"].startswith(prefix)]
+        folders = _collection_folders(items, prefix)
+        for item in items:
+            for tag in item["tags"]:
+                if tag not in tags:
+                    tags.append(tag)
+        tags.sort(key=str.lower)
     # Optional status filter (chips on projects/tasks index pages).
     estado = request.query_params.get("estado", "todos")
     if estado not in STATUS_FILTERS.get(collection, {}) and estado != "todos":
@@ -289,6 +335,9 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
             items=items,
             vista=vista,
             estado=estado,
+            folders=folders,
+            carpeta=carpeta,
+            item_tags=tags,
             status_filters=STATUS_FILTERS.get(collection),
             task_groups=task_groups,
         ),
@@ -296,6 +345,23 @@ async def collection_index(collection: str, request: Request, conn: ConnDep, use
     if remember is not None:
         response.set_cookie("vista", remember)
     return response
+
+
+def _collection_folders(items: list[dict], prefix: str) -> list[dict]:
+    """First-level folder names under `prefix`, with item counts."""
+    counts: dict[str, int] = {}
+    for item in items:
+        if not item["path"].startswith(prefix):
+            continue
+        rel = item["path"][len(prefix):]
+        if "/" not in rel:
+            continue
+        name = rel.split("/", 1)[0]
+        counts[name] = counts.get(name, 0) + 1
+    return [
+        {"name": name, "count": count}
+        for name, count in sorted(counts.items(), key=lambda kv: kv[0].lower())
+    ]
 
 
 def _group_by_project(conn, items: list[dict]) -> list[dict]:
@@ -327,22 +393,26 @@ async def new_page_form(collection: str, request: Request, conn: ConnDep, user: 
         return RedirectResponse("/login", status_code=303)
     if user["role"] not in EDIT_ROLES:
         raise HTTPException(status_code=403)
-    # Day-click prefill for calendar events.
+    # Prefills: day-click for calendar events, folder for wiki pages.
     fecha = request.query_params.get("fecha", "")
     defaults = {"start": f"{fecha}T09:00"} if fecha and collection == "calendario" else {}
-    return templates.TemplateResponse(
+    if collection in FOLDER_COLLECTIONS or collection == "wiki":
+        ruta = request.query_params.get("ruta", "").strip().strip("/")
+        if ruta and vault.valid_vault_path(ruta):
+            defaults["ruta"] = ruta
+    ctx = base_ctx(
         request,
-        "page_new.html",
-        base_ctx(
-            request,
-            conn,
-            user,
-            collection_slug=collection,
-            collection_label=info["label"],
-            form_fields=fields_for(collection),
-            defaults=defaults,
-        ),
+        conn,
+        user,
+        collection_slug=collection,
+        collection_label=info["label"],
+        form_fields=fields_for(collection),
+        defaults=defaults,
     )
+    if request.query_params.get("fragmento") == "1":
+        # Modal fragment: just the form, for the global popup.
+        return templates.TemplateResponse(request, "_new_form.html", ctx)
+    return templates.TemplateResponse(request, "page_new.html", ctx)
 
 
 @router.post("/{collection}/nuevo")
@@ -361,10 +431,72 @@ async def create_page(
         raise HTTPException(status_code=403)
 
     form = await request.form()
+    modal = request.headers.get("hx-request") == "true"
+    try:
+        response = await _create_page_body(
+            request, conn, user, settings, collection, form
+        )
+    except HTTPException as exc:
+        if not modal:
+            raise
+        # Modal submit failed: re-render the fragment with the error.
+        info = COLLECTIONS[collection]
+        defaults = {
+            field["name"]: str(form.get(field["name"], ""))
+            for field in fields_for(collection)
+            if field["kind"] in ("text", "date", "datetime", "url")
+        }
+        return templates.TemplateResponse(
+            request,
+            "_new_form.html",
+            base_ctx(
+                request, conn, user,
+                collection_slug=collection,
+                collection_label=info["label"],
+                form_fields=fields_for(collection),
+                defaults=defaults,
+                error=exc.detail,
+            ),
+        )
+    if modal:
+        # htmx swap: close the popup and refresh the page behind it.
+        return HTMLResponse(
+            "<script>makerosCloseModal(); window.location.reload();</script>"
+        )
+    return response
+
+
+def _modal_done() -> HTMLResponse:
+    return HTMLResponse(
+        "<script>makerosCloseModal(); window.location.reload();</script>"
+    )
+
+
+async def _create_page_body(
+    request: Request, conn, user, settings, collection: str, form,
+) -> RedirectResponse:
+    """Shared creation logic (see create_page); raises HTTPException."""
     title = str(form.get("title", "")).strip()
     body = str(form.get("body", "")).strip()
     if not title:
         raise HTTPException(status_code=400, detail="El título es obligatorio")
+
+    # Calendar events are Google-format rows, not Markdown pages: store
+    # the event and push it to Google right away.
+    if collection == "calendario":
+        start = str(form.get("start", "")).strip()
+        end = str(form.get("end", "")).strip()
+        location = str(form.get("location", "")).strip()
+        if not start or parse_when(start) is None:
+            raise HTTPException(status_code=400, detail="Fecha de inicio inválida")
+        category = str(form.get("category", "")).strip()
+        event_id = event_store.create_local_event(
+            conn, title, start, end, location,
+            description=body, category=category,
+            people=str(form.get("people", "")).strip(),
+        )
+        schedule_sync(settings, force=True)
+        return RedirectResponse(f"/calendario/evento/{event_id}", status_code=303)
 
     info = COLLECTIONS[collection]
     meta, seed_body = _template_seed(settings, info["template"])
@@ -413,6 +545,15 @@ async def create_page(
     if collection == "projects":
         page_path = f"{page_path}/project"
 
+    # Pages can be born inside a vault folder (?ruta=guias/impresion);
+    # the folder prefix applies before collision checking.
+    if collection in FOLDER_COLLECTIONS or collection == "wiki":
+        ruta = str(form.get("ruta", "")).strip().strip("/")
+        if ruta:
+            if not vault.valid_vault_path(ruta):
+                raise HTTPException(status_code=400, detail="ruta de carpeta no válida")
+            page_path = f"{ruta}/{page_path}"
+
     candidate = page_path
     n = 2
     file, _doc_id = _resolve_page(settings, collection, candidate)
@@ -426,6 +567,9 @@ async def create_page(
 
     frontmatter.write(file, meta, body or seed_body)
     index_file(conn, settings.content_dir, file)
+    if collection == "calendario":
+        # New event: push it to Google in the background right away.
+        schedule_sync(settings, force=True)
     return RedirectResponse(f"/{collection}/{candidate}", status_code=303)
 
 
@@ -438,10 +582,10 @@ def _apply_banner_form(form, settings, meta: dict, stem: str) -> None:
         if ext not in UPLOAD_EXTENSIONS:
             raise HTTPException(status_code=400, detail="Formato de imagen no permitido")
         data = upload.file.read()
-        if len(data) > MAX_BANNER_BYTES:
+        if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=400, detail="La imagen supera 5 MB")
         name = f"{_slugify(stem)}-{secrets.token_hex(4)}.{ext}"
-        (_uploads_dir(settings) / name).write_bytes(data)
+        (uploads_dir(settings) / name).write_bytes(data)
         meta["banner"] = f"/media/{name}"
         return
     url = str(form.get("banner_url", "")).strip()
@@ -501,6 +645,47 @@ async def get_block(
     )
 
 
+@router.post("/{collection}/{page_path:path}/imagenes")
+async def upload_block_image(
+    collection: str,
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    archivo: UploadFile,
+):
+    """Common image upload for page blocks.
+
+    Files land in content/_uploads/<collection>/<page>/<file> and are
+    served login-gated through /media/. One route serves projects,
+    tasks, research and every other collection.
+    """
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    _collection_or_404(collection)
+    settings = get_settings(request)
+    ext = (archivo.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="formato de imagen no permitido")
+    data = archivo.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="la imagen supera los 5 MB")
+    if not data:
+        raise HTTPException(status_code=400, detail="imagen vacía")
+
+    base = _slugify((archivo.filename or "imagen").rsplit(".", 1)[0]) or "imagen"
+    name = f"{base}.{ext}"
+    target_dir = uploads_dir(settings) / collection / page_path
+    target_dir.mkdir(parents=True, exist_ok=True)
+    n = 2
+    while (target_dir / name).exists():
+        name = f"{base}-{n}.{ext}"
+        n += 1
+    (target_dir / name).write_bytes(data)
+
+    return JSONResponse({"url": f"/media/{collection}/{page_path}/{name}", "name": name})
+
+
 @router.get("/{collection}/{page_path:path}/bloques/{block_index:int}/editar")
 async def edit_block_form(
     collection: str,
@@ -525,6 +710,7 @@ async def edit_block_form(
             "page_url": f"/{collection}/{page_path}",
             "i": block_index,
             "text": blocks[block_index].text,
+            "tipo": infer_kind(blocks[block_index].text),
         },
     )
 
@@ -579,6 +765,41 @@ async def delete_block(
     return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
 
 
+@router.post("/{collection}/{page_path:path}/bloques/{block_index:int}/tamano")
+async def resize_image_block(
+    collection: str,
+    page_path: str,
+    block_index: int,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    tamano: str = Form(...),
+):
+    """Corner-drag resize: write the size token into the image alt."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    named = ("pequena", "mediana", "grande", "completa")
+    if tamano not in named and not (tamano.isdigit() and 5 <= int(tamano) <= 100):
+        raise HTTPException(status_code=400, detail="tamaño no válido")
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, collection, page_path)
+    blocks = split_blocks(body)
+    if not _valid_index(blocks, block_index):
+        raise HTTPException(status_code=404)
+    texts = [b.text for b in blocks]
+    match = re.match(r"!\[([^\]]*)\]\(([^)]+)\)", texts[block_index].strip())
+    if match is None:
+        raise HTTPException(status_code=400, detail="el bloque no es una imagen")
+    alt = match.group(1).split("|")[0].strip()
+    texts[block_index] = texts[block_index].replace(
+        match.group(0), f"![{alt}|{tamano}]({match.group(2)})", 1
+    )
+    _save_blocks(conn, settings, file, meta, texts)
+    return _block_partial(
+        request, user, f"/{collection}/{page_path}", block_index, texts[block_index]
+    )
+
+
 @router.post("/{collection}/{page_path:path}/bloques/nuevo")
 async def add_block(
     collection: str,
@@ -603,6 +824,25 @@ async def add_block(
     position = len(texts) if despues == -1 else despues + 1
     texts.insert(position, BLOCK_SEEDS[tipo])
     _save_blocks(conn, settings, file, meta, texts)
+
+    if request.headers.get("HX-Request") == "true":
+        # Image blocks open the editor immediately (upload menu ready);
+        # every other type lands rendered, ready to edit on demand.
+        if tipo == "imagen":
+            return templates.TemplateResponse(
+                request,
+                "_block_form.html",
+                {
+                    "user": user,
+                    "page_url": f"/{collection}/{page_path}",
+                    "i": position,
+                    "text": texts[position],
+                    "tipo": tipo,
+                },
+            )
+        return _block_partial(
+            request, user, f"/{collection}/{page_path}", position, texts[position]
+        )
     return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
 
 
@@ -778,6 +1018,274 @@ async def delete_page(
 # The catch-all page view must be registered LAST: the block/banner
 # routes below it in the URL space would otherwise be shadowed by its
 # {page_path:path} converter (first match wins in Starlette).
+@router.get("/calendario/evento/{event_id}")
+async def event_detail(event_id: str, request: Request, conn: ConnDep, user: UserDep):
+    """Event detail (Google-format row): view, open in Google, delete."""
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    event = event_store.get_event(conn, event_id)
+    if event is None:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(
+        request,
+        "event.html",
+        base_ctx(
+            request,
+            conn,
+            user,
+            collection_slug="calendario",
+            collection_label="Calendario",
+            event=event,
+            event_when=fmt_when(event["start"])
+            + (f" — {fmt_when(event['end'])}" if event["end"] else ""),
+        ),
+    )
+
+
+@router.post("/calendario/evento/{event_id}/eliminar")
+async def event_delete(event_id: str, request: Request, conn: ConnDep, user: UserDep):
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    event = event_store.get_event(conn, event_id)
+    if event is None:
+        raise HTTPException(status_code=404)
+    event_store.delete_event(conn, event_id)
+    # Remove on Google too (local-* ids were never pushed, skip those).
+    if not event_id.startswith(event_store.LOCAL_PREFIX):
+        from ..gcal import chosen_calendar, client_credentials, delete_remote_event, refresh_access
+
+        refresh = get_ui(conn, "gcal:refresh_token")
+        calendar_id = chosen_calendar(conn)
+        settings = get_settings(request)
+        client_id, client_secret = client_credentials(conn, settings)
+        if refresh and calendar_id and client_id and client_secret:
+            try:
+                access = refresh_access(client_id, client_secret, refresh)
+                delete_remote_event(access, calendar_id, event_id)
+            except Exception:  # noqa: BLE001 — offline: pull will re-add it
+                pass
+    return RedirectResponse("/calendario", status_code=303)
+
+
+@router.get("/wiki/grafos")
+async def wiki_graph(request: Request, conn: ConnDep, user: UserDep):
+    """Second-brain graph of all collections and their [[links]]."""
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "grafos.html",
+        base_ctx(
+            request, conn, user,
+            collection_slug="wiki",
+            collection_label="Wiki",
+            graph=vault.graph_data(conn),
+        ),
+    )
+
+
+@router.get("/wiki/grafos/datos")
+async def wiki_graph_data(conn: ConnDep, user: UserDep):
+    """Graph JSON for the corner popup (lazy-fetched on first open)."""
+    if user is None:
+        raise HTTPException(status_code=403)
+    return JSONResponse(vault.graph_data(conn))
+
+
+@router.post("/wiki/carpeta")
+async def wiki_create_folder(
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    ruta: Annotated[str, Form()],
+):
+    """Create a folder (nested allowed) inside the wiki vault."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    ruta = ruta.strip().strip("/")
+    if not vault.valid_vault_path(ruta):
+        raise HTTPException(status_code=400, detail="nombre de carpeta no válido")
+    vault.create_folder(get_settings(request), ruta)
+    return RedirectResponse(f"/wiki/{ruta}", status_code=303)
+
+
+@router.post("/wiki/carpeta/{folder_path:path}/mover")
+async def wiki_move_folder(
+    folder_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    destino: Annotated[str, Form()] = "",
+):
+    """Move a folder (drag & drop); pages inside keep their names."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    folder_path = folder_path.strip().strip("/")
+    if not folder_path or not vault.is_folder(settings, folder_path):
+        raise HTTPException(status_code=404)
+    destino = destino.strip().strip("/")
+    if destino and not vault.valid_vault_path(destino):
+        raise HTTPException(status_code=400, detail="ruta no válida")
+    if destino == folder_path or destino.startswith(folder_path + "/"):
+        raise HTTPException(
+            status_code=400, detail="no puedes mover una carpeta dentro de sí misma"
+        )
+    name = folder_path.rsplit("/", 1)[-1]
+    nueva = f"{destino}/{name}" if destino else name
+    vault.move_folder(conn, settings, folder_path, nueva)
+    return RedirectResponse(f"/wiki/{nueva}", status_code=303)
+
+
+@router.post("/wiki/{page_path:path}/mover")
+async def wiki_move_page(
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+    nueva_ruta: Annotated[str, Form()],
+):
+    """Move/rename a wiki page; incoming [[links]] are rewritten."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    file, _doc_id = _resolve_page(settings, "wiki", page_path)
+    if not file.is_file():
+        raise HTTPException(status_code=404)
+    nueva = nueva_ruta.strip().strip("/")
+    if not vault.valid_vault_path(nueva):
+        raise HTTPException(status_code=400, detail="ruta no válida")
+    target = settings.content_dir / "wiki" / f"{nueva}.md"
+    if target.exists():
+        raise HTTPException(status_code=400, detail="ya existe una página en esa ruta")
+    vault.move_page(conn, settings, f"wiki/{page_path}", f"wiki/{nueva}")
+    return RedirectResponse(f"/wiki/{nueva}", status_code=303)
+
+
+@router.get("/tasks/{page_path:path}/editar")
+async def task_edit_form(
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+):
+    """Modal fragment to edit a task from the kanban view."""
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    file, meta, _body = _load_for_edit(get_settings(request), "tasks", page_path)
+    return templates.TemplateResponse(
+        request,
+        "_task_edit.html",
+        base_ctx(
+            request, conn, user,
+            page_path=page_path,
+            meta=meta,
+            priorities=TASK_PRIORITIES,
+        ),
+    )
+
+
+@router.post("/tasks/{page_path:path}/editar")
+async def task_edit_save(
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+):
+    """Save the task-edit modal: frontmatter fields only, body untouched."""
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, "tasks", page_path)
+    form = await request.form()
+    modal = request.headers.get("hx-request") == "true"
+
+    def fail(error: str):
+        if not modal:
+            raise HTTPException(status_code=400, detail=error)
+        return templates.TemplateResponse(
+            request, "_task_edit.html",
+            base_ctx(
+                request, conn, user,
+                page_path=page_path,
+                meta={**meta, **{k: str(form.get(k, "")) for k in
+                                 ("title", "status", "assignee", "priority", "due", "project")}},
+                priorities=TASK_PRIORITIES,
+                error=error,
+            ),
+        )
+
+    title = str(form.get("title", "")).strip()
+    if not title:
+        return fail("El título es obligatorio")
+    meta["title"] = title
+    status = str(form.get("status", "")).strip()
+    if status and status not in TASK_STATUSES:
+        return fail("Estado no válido")
+    meta["status"] = status
+    priority = str(form.get("priority", "")).strip()
+    if priority and priority not in TASK_PRIORITIES:
+        return fail("Prioridad no válida")
+    meta["priority"] = priority
+    for key in ("assignee", "project"):
+        meta[key] = str(form.get(key, "")).strip()
+    due = str(form.get("due", "")).strip()
+    if due:
+        parsed = parse_when(due)
+        if parsed is None:
+            return fail("Fecha de vencimiento inválida")
+        meta["due"] = fmt_when(parsed)
+    elif "due" in meta:
+        del meta["due"]
+
+    frontmatter.write(file, meta, body)
+    index_file(conn, settings.content_dir, file)
+    if modal:
+        return _modal_done()
+    return RedirectResponse(f"/tasks/{page_path}", status_code=303)
+
+
+@router.post("/{collection}/{page_path:path}/fijar")
+async def toggle_pin(
+    collection: str,
+    page_path: str,
+    request: Request,
+    conn: ConnDep,
+    user: UserDep,
+):
+    """Pin/unpin a page; pinned pages show on the home dashboard."""
+    _collection_or_404(collection)
+    if user is None or user["role"] not in EDIT_ROLES:
+        raise HTTPException(status_code=403)
+    settings = get_settings(request)
+    file, meta, body = _load_for_edit(settings, collection, page_path)
+    meta["pinned"] = not meta.get("pinned")
+    frontmatter.write(file, meta, body)
+    index_file(conn, settings.content_dir, file)
+    return RedirectResponse(f"/{collection}/{page_path}", status_code=303)
+
+
+def _vault_response(request, conn, user, info, base: str):
+    """Navigator (tree of folders/pages) for the vault or one folder."""
+    settings = get_settings(request)
+    return templates.TemplateResponse(
+        request,
+        "wiki_home.html",
+        base_ctx(
+            request, conn, user,
+            collection_slug="wiki",
+            collection_label=info["label"],
+            tree=vault.build_tree(conn, base),
+            folder_path=base,
+            is_folder=vault.is_folder(settings, base),
+        ),
+    )
+
+
 @router.get("/{collection}/{page_path:path}")
 async def page_view(
     collection: str,
@@ -792,6 +1300,12 @@ async def page_view(
     settings = get_settings(request)
     file, _doc_id = _resolve_page(settings, collection, page_path)
     if not file.is_file():
+        # A folder of any collection (e.g. /wiki/guias) opens its scoped
+        # card view; /wiki/<folder> just redirects there.
+        if collection in FOLDER_COLLECTIONS and vault.is_folder(settings, page_path):
+            return RedirectResponse(
+                f"/{collection}?carpeta={page_path}", status_code=303
+            )
         raise HTTPException(status_code=404)
 
     meta, body = frontmatter.read(file)

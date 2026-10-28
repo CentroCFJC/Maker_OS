@@ -26,7 +26,7 @@ def test_bad_login_shows_error(client: TestClient):
 def test_login_then_home(logged_in_client: TestClient):
     response = logged_in_client.get("/")
     assert response.status_code == 200
-    assert "Buenas, Jacob" in response.text
+    assert "Jacob" in response.text  # greeting includes the user's name
     assert "Cambios recientes" in response.text
 
 
@@ -36,11 +36,20 @@ def test_logout(logged_in_client: TestClient):
     assert logged_in_client.get("/", follow_redirects=False).status_code == 303
 
 
-def test_wiki_index_lists_pages(logged_in_client: TestClient):
+def test_wiki_index_is_the_vault_navigator(logged_in_client: TestClient):
     response = logged_in_client.get("/wiki")
     assert response.status_code == 200
     assert "Bienvenido a MakerOS" in response.text
     assert "Guía del sistema" in response.text
+    # Cards by default; the Obsidian tree lives one click away.
+    assert "card-grid" in response.text
+    assert "Nueva carpeta" in response.text
+    assert "vista=arbol" in response.text
+    assert "/wiki/grafos" in response.text
+
+    tree = logged_in_client.get("/wiki?vista=arbol")
+    assert "vault-tree" in tree.text
+    assert "Guía del sistema" in tree.text
 
 
 def test_wiki_page_renders_markdown_and_wikilink(logged_in_client: TestClient):
@@ -281,21 +290,17 @@ def test_invalid_icon_rejected(logged_in_client: TestClient):
 
 
 def test_collection_view_toggle(logged_in_client: TestClient):
-    default = logged_in_client.get("/wiki")
-    assert "item-list" in default.text
-    assert "card-grid" not in default.text
+    default = logged_in_client.get("/research")
+    assert "card-grid" in default.text
+    assert "item-list" not in default.text
 
-    grid = logged_in_client.get("/wiki?vista=tarjetas")
-    assert "card-grid" in grid.text
-    assert "vista=tarjetas" in grid.headers.get("set-cookie", "")
+    grid = logged_in_client.get("/research?vista=lista")
+    assert "item-list" in grid.text
+    assert "vista=lista" in grid.headers.get("set-cookie", "")
 
     # The choice is remembered in the cookie.
-    remembered = logged_in_client.get("/wiki")
-    assert "card-grid" in remembered.text
-
-    back = logged_in_client.get("/wiki?vista=lista")
-    assert "item-list" in back.text
-    assert "card-grid" not in back.text
+    remembered = logged_in_client.get("/research")
+    assert "item-list" in remembered.text
 
 
 # ---------- Calendar ----------
@@ -315,15 +320,28 @@ def _write(path, meta, body="Agenda."):
     fm_write(path, meta, body)
 
 
+def _add_event(settings, summary, start, end="", location="", category=""):
+    """Calendar events are SQLite rows (Google format), not files."""
+    from makeros.db import connect
+    from makeros.web import event_store
+
+    conn = connect(settings.db_path)
+    event_store.ensure_schema(conn)
+    event_id = event_store.create_local_event(
+        conn, summary, start, end, location, category=category
+    )
+    conn.close()
+    return event_id
+
+
 def test_calendar_view_shows_events_and_projects(logged_in_client: TestClient, settings):
     from datetime import date, timedelta
 
     day = date.today() + timedelta(days=3)
     nxt = day + timedelta(days=1)
-    _write(
-        settings.content_dir / "calendario" / "taller.md",
-        {"title": "Taller de impresión", "start": f"{day.isoformat()} 16:00",
-         "end": f"{day.isoformat()} 18:00", "location": "Sala CAUCE"},
+    _add_event(
+        settings, "Taller de impresión",
+        f"{day.isoformat()} 16:00", f"{day.isoformat()} 18:00", "Sala CAUCE",
     )
     _write(
         settings.content_dir / "projects" / "cauce" / "project.md",
@@ -339,7 +357,9 @@ def test_calendar_view_shows_events_and_projects(logged_in_client: TestClient, s
     assert 'class="cal-chip event"' in response.text
     assert 'class="cal-chip project"' in response.text
     assert f"/calendario/nuevo?fecha={day.isoformat()}" in response.text
-    assert "calendario.ics" in response.text  # feed URL on the connect panel
+    assert "weekend" in response.text  # weekend cells flagged
+    assert "Próximamente" in response.text
+    assert "Conectar con Google Calendar" not in response.text  # moved to admin
 
 
 def test_calendar_requires_login(client: TestClient):
@@ -352,17 +372,11 @@ def test_ics_feed(logged_in_client: TestClient, settings):
     from datetime import date, timedelta
 
     day = date.today() + timedelta(days=2)
-    _write(
-        settings.content_dir / "calendario" / "cita.md",
-        {"title": "Cita con pausa, coma", "start": f"{day.isoformat()} 10:00",
-         "end": f"{day.isoformat()} 11:00", "location": "Sala"},
+    _add_event(
+        settings, "Cita con pausa, coma",
+        f"{day.isoformat()} 10:00", f"{day.isoformat()} 11:00", "Sala",
     )
-    _write(
-        settings.content_dir / "calendario" / "dia-completo.md",
-        {"title": "Jornada de puertas abiertas", "start": day.isoformat(),
-         "end": day.isoformat()},
-    )
-    _reindex(settings)
+    _add_event(settings, "Jornada de puertas abiertas", day.isoformat())
 
     response = logged_in_client.get("/calendario.ics")
     assert response.status_code == 200
@@ -375,6 +389,67 @@ def test_ics_feed(logged_in_client: TestClient, settings):
     # All-day DTEND is exclusive (next day) per RFC 5545.
     assert "DTEND;VALUE=DATE:" + (day + timedelta(days=1)).strftime("%Y%m%d") in text
     assert text.rstrip().endswith("END:VCALENDAR")
+
+
+def test_ics_feed_token_allows_client_without_login(client: TestClient, settings):
+    import re
+
+    from makeros.auth import create_user
+    from makeros.db import connect, init_schema
+
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    create_user(conn, "jacob", "secreto123", role="admin")
+    conn.close()
+
+    # The admin panel shows the tokenized feed URL to a logged-in admin.
+    client.post(
+        "/login", data={"username": "jacob", "password": "secreto123"}
+    )
+    page = client.get("/admin")
+    match = re.search(r"calendario\.ics\?token=([A-Za-z0-9_\-]+)", page.text)
+    assert match, "tokenized feed URL missing from calendar page"
+    token = match.group(1)
+
+    # A separate client with no session cookie: valid token works,
+    # bad token and no token get 401.
+    anonymous = TestClient(client.app)
+    ok = anonymous.get(f"/calendario.ics?token={token}")
+    assert ok.status_code == 200
+    assert ok.text.startswith("BEGIN:VCALENDAR")
+
+    assert anonymous.get("/calendario.ics").status_code == 401
+    assert anonymous.get("/calendario.ics?token=wrong").status_code == 401
+
+
+def test_ics_feed_token_rotation(client: TestClient, settings):
+    import re
+
+    from makeros.auth import create_user
+    from makeros.db import connect, init_schema
+
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    create_user(conn, "jacob", "secreto123", role="admin")
+    conn.close()
+
+    client.post(
+        "/login", data={"username": "jacob", "password": "secreto123"}
+    )
+    token = re.search(
+        r"calendario\.ics\?token=([A-Za-z0-9_\-]+)", client.get("/admin").text
+    ).group(1)
+
+    response = client.post("/calendario/token", follow_redirects=False)
+    assert response.status_code == 303
+    new_token = re.search(
+        r"calendario\.ics\?token=([A-Za-z0-9_\-]+)", client.get("/admin").text
+    ).group(1)
+    assert new_token != token
+
+    anonymous = TestClient(client.app)
+    assert anonymous.get(f"/calendario.ics?token={token}").status_code == 401
+    assert anonymous.get(f"/calendario.ics?token={new_token}").status_code == 200
 
 
 def test_create_event_with_dates(logged_in_client: TestClient, settings):
@@ -390,25 +465,39 @@ def test_create_event_with_dates(logged_in_client: TestClient, settings):
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/calendario/reunion-de-planificacion"
+    assert response.headers["location"].startswith("/calendario/evento/")
 
-    from makeros import frontmatter
+    from makeros.db import connect
+    from makeros.web import event_store
 
-    meta, body = frontmatter.read(
-        settings.content_dir / "calendario" / "reunion-de-planificacion.md"
+    conn = connect(settings.db_path)
+    event = event_store.get_event(
+        conn, response.headers["location"].rsplit("/", 1)[-1]
     )
-    assert meta["start"] == "2026-11-04 15:00"
-    assert meta["end"] == "2026-11-04 16:30"
-    assert meta["location"] == "Sala CAUCE"
+    conn.close()
+    assert event["summary"] == "Reunión de planificación"
+    assert event["start"].strftime("%Y-%m-%d %H:%M") == "2026-11-04 15:00"
+    assert event["end"].strftime("%Y-%m-%d %H:%M") == "2026-11-04 16:30"
+    assert event["location"] == "Sala CAUCE"
+    assert event["description"] == "Puntos del día."
 
 
 def test_create_event_defaults_end_to_start(logged_in_client: TestClient, settings):
-    logged_in_client.post("/calendario/nuevo", data={"title": "Puntual", "start": "2026-11-10"})
-    from makeros import frontmatter
+    response = logged_in_client.post(
+        "/calendario/nuevo", data={"title": "Puntual", "start": "2026-11-10"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from makeros.db import connect
+    from makeros.web import event_store
 
-    meta, _ = frontmatter.read(settings.content_dir / "calendario" / "puntual.md")
-    assert meta["start"] == "2026-11-10"
-    assert meta["end"] == "2026-11-10"
+    conn = connect(settings.db_path)
+    event = event_store.get_event(
+        conn, response.headers["location"].rsplit("/", 1)[-1]
+    )
+    conn.close()
+    assert event["start"].isoformat() == "2026-11-10"
+    assert event["end"].isoformat() == "2026-11-10"
 
 
 def test_create_event_rejects_bad_date(logged_in_client: TestClient):
@@ -467,7 +556,7 @@ def test_admin_can_change_collection_icon(logged_in_client: TestClient):
 
     # The collection page offers the section picker with the active icon.
     page = logged_in_client.get("/wiki")
-    assert "Icono de la sección" in page.text
+    assert "section-icon-picker" in page.text
 
     # Empty value resets to the code default.
     logged_in_client.post("/ui/icono/wiki", data={"icon": ""})
@@ -493,11 +582,11 @@ def test_only_admin_changes_collection_icon(logged_in_client: TestClient, settin
     response = logged_in_client.post("/ui/icono/wiki", data={"icon": "zap"})
     assert response.status_code == 403
     picker = logged_in_client.get("/wiki")
-    assert "Icono de la sección" not in picker.text
+    assert "section-icon-picker" not in picker.text
 
 
 def test_card_size_slider_in_grid_view(logged_in_client: TestClient):
-    response = logged_in_client.get("/wiki?vista=tarjetas")
+    response = logged_in_client.get("/research?vista=tarjetas")
     assert response.status_code == 200
     assert 'class="card-size-input"' in response.text
     assert "makerosCardSize" in response.text
@@ -541,7 +630,7 @@ def test_home_dashboard_sections(logged_in_client: TestClient, settings):
     response = logged_in_client.get("/")
     assert response.status_code == 200
     assert "Makerspace" in response.text
-    assert "Buenas, Jacob" in response.text
+    assert "Jacob" in response.text  # greeting includes the user's name
     assert "Tareas sin proyecto" in response.text
     assert "Hackaton VR" in response.text            # unassigned task
     assert '<span class="count-pill">1</span>' in response.text  # one pending
@@ -581,12 +670,10 @@ def test_projects_page_status_chips(logged_in_client: TestClient, settings):
 
 
 def test_sidebar_para_hoy_shows_todays_events(logged_in_client: TestClient, settings):
-    _write(
-        settings.content_dir / "calendario" / "reunion-hoy.md",
-        {"title": "Reunión de hoy", "start": f"{date.today().isoformat()} 15:00",
-         "end": f"{date.today().isoformat()} 16:00"},
+    _add_event(
+        settings, "Reunión de hoy",
+        f"{date.today().isoformat()} 15:00", f"{date.today().isoformat()} 16:00",
     )
-    _reindex(settings)
     response = logged_in_client.get("/")
     assert "Para hoy" in response.text
     assert "Reunión de hoy" in response.text
@@ -689,12 +776,15 @@ def test_banner_rejects_bad_input(logged_in_client: TestClient):
 
 
 def test_banner_shows_on_cards(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "research" / "repo-banner.md",
+           {"title": "Repo banner"}, "Notas.")
+    _reindex(settings)
     logged_in_client.post(
-        "/wiki/inicio/banner",
+        "/research/repo-banner/banner",
         data={"url": "https://example.com/x.png"},
         follow_redirects=False,
     )
-    cards = logged_in_client.get("/wiki?vista=tarjetas")
+    cards = logged_in_client.get("/research?vista=tarjetas")
     assert "card-banner" in cards.text
     assert "https://example.com/x.png" in cards.text
 
@@ -838,8 +928,11 @@ def test_status_chips_have_tooltips(logged_in_client: TestClient):
     assert 'title="Sin filtro' in home.text
 
 
-def test_card_slider_is_stepped(logged_in_client: TestClient):
-    response = logged_in_client.get("/wiki?vista=tarjetas")
+def test_card_slider_is_stepped(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "research" / "repo-pasos.md",
+           {"title": "Repo pasos"}, "Notas.")
+    _reindex(settings)
+    response = logged_in_client.get("/research?vista=tarjetas")
     assert 'min="1" max="4" step="1"' in response.text
     assert 'data-step="2"' in response.text   # server default: Normal
     assert "card-size-label" in response.text
@@ -1014,7 +1107,7 @@ def test_tasks_kanban_grouped_by_project(logged_in_client: TestClient, settings)
 
 def test_tasks_list_grouped_by_project(logged_in_client: TestClient, settings):
     _seed_tasks(settings)
-    response = logged_in_client.get("/tasks")
+    response = logged_in_client.get("/tasks?vista=lista")
     assert 'class="project-group"' in response.text
     assert 'href="/projects/cauce/project"' in response.text
     assert "Sin proyecto" in response.text
@@ -1023,11 +1116,11 @@ def test_tasks_list_grouped_by_project(logged_in_client: TestClient, settings):
 def test_kanban_toggle_only_on_tasks(logged_in_client: TestClient):
     tasks = logged_in_client.get("/tasks")
     assert ">Kanban</a>" in tasks.text
-    wiki = logged_in_client.get("/wiki")
+    wiki = logged_in_client.get("/research")
     assert ">Kanban</a>" not in wiki.text
-    # Kanban on another collection falls back to the list view.
-    fallback = logged_in_client.get("/wiki?vista=kanban")
-    assert 'class="item-list"' in fallback.text
+    # Kanban on another collection falls back to the card view.
+    fallback = logged_in_client.get("/research?vista=kanban")
+    assert 'class="card-grid"' in fallback.text
 
 
 def test_status_change_endpoint(logged_in_client: TestClient, settings):
@@ -1049,3 +1142,1178 @@ def test_new_page_breadcrumb_links_to_slug(logged_in_client: TestClient):
     response = logged_in_client.get("/projects/nuevo")
     assert 'href="/projects"' in response.text
     assert 'href="/Proyectos"' not in response.text
+
+
+def _admin_client(client: TestClient, settings, role="admin"):
+    from makeros.auth import create_user
+    from makeros.db import connect, init_schema
+
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    create_user(conn, "jacob", "secreto123", role=role)
+    conn.close()
+    client.post("/login", data={"username": "jacob", "password": "secreto123"})
+    return client
+
+
+def test_admin_panel_requires_admin(client: TestClient, settings):
+    _admin_client(client, settings, role="viewer")
+    response = client.get("/admin", follow_redirects=False)
+    assert response.status_code == 303
+
+
+def test_admin_panel_lists_users_and_config(client: TestClient, settings):
+    _admin_client(client, settings)
+    response = client.get("/admin")
+    assert response.status_code == 200
+    assert "Usuarios" in response.text
+    assert "jacob" in response.text
+    assert "Nombre del sitio" in response.text
+    assert "calendario.ics?token=" in response.text
+    # Tabs: every panel present, hidden ones only revealed by JS.
+    for tab in ("usuarios", "apariencia", "contenido", "integracion", "sistema"):
+        assert f'data-tab="{tab}"' in response.text
+
+
+def test_admin_creates_user_and_sets_role(client: TestClient, settings):
+    _admin_client(client, settings)
+    created = client.post(
+        "/admin/usuarios",
+        data={"username": "maria", "password": "clave-segura1", "role": "member",
+              "display_name": "María"},
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+
+    from makeros.db import connect
+
+    conn = connect(settings.db_path)
+    row = conn.execute("SELECT * FROM users WHERE username = 'maria'").fetchone()
+    conn.close()
+    assert row is not None and row["role"] == "member"
+
+    promoted = client.post(
+        f'/admin/usuarios/{row["id"]}/rol', data={"role": "admin"}, follow_redirects=False
+    )
+    assert promoted.status_code == 303
+    conn = connect(settings.db_path)
+    role_row = conn.execute(
+        "SELECT role FROM users WHERE id = ?", (row["id"],)
+    ).fetchone()
+    assert role_row[0] == "admin"
+    conn.close()
+
+
+def test_admin_rejects_short_password_and_duplicate(client: TestClient, settings):
+    _admin_client(client, settings)
+    short = client.post(
+        "/admin/usuarios", data={"username": "x", "password": "corta", "role": "member"}
+    )
+    assert short.status_code == 400
+    dup = client.post(
+        "/admin/usuarios", data={"username": "jacob", "password": "clave-segura1", "role": "member"}
+    )
+    assert dup.status_code == 400
+
+
+def test_admin_cannot_demote_or_delete_last_admin(client: TestClient, settings):
+    _admin_client(client, settings)
+    me = client.post("/admin/usuarios/1/rol", data={"role": "member"})
+    assert me.status_code == 400
+    delete = client.post("/admin/usuarios/1/eliminar", follow_redirects=False)
+    assert delete.status_code == 400
+
+
+def test_admin_resets_password(client: TestClient, settings):
+    _admin_client(client, settings)
+    client.post(
+        "/admin/usuarios",
+        data={"username": "laura", "password": "clave-segura1", "role": "member"},
+    )
+    from makeros.db import connect
+
+    conn = connect(settings.db_path)
+    uid = conn.execute("SELECT id FROM users WHERE username = 'laura'").fetchone()[0]
+    conn.close()
+    reset = client.post(
+        f"/admin/usuarios/{uid}/clave", data={"password": "nueva-clave9"}, follow_redirects=False
+    )
+    assert reset.status_code == 303
+
+    fresh = TestClient(client.app)
+    ok = fresh.post("/login", data={"username": "laura", "password": "nueva-clave9"})
+    assert ok.status_code == 200
+
+
+def test_admin_sets_site_name(client: TestClient, settings):
+    _admin_client(client, settings)
+    client.post("/admin/config", data={"site_name": "Laboratorio FJC"})
+    response = client.get("/")
+    assert "Laboratorio FJC" in response.text
+
+
+# ---------- Profile: avatar, own data, own password ----------
+
+def _png_bytes() -> bytes:
+    # 1x1 transparent PNG.
+    import base64
+
+    return base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg"
+        "YGBgAAAABQABh6FO1AAAAABJRU5ErkJggg=="
+    )
+
+
+def test_profile_avatar_upload_and_remove(logged_in_client: TestClient, settings):
+    response = logged_in_client.get("/perfil")
+    assert response.status_code == 200
+    assert "Foto de perfil" in response.text
+
+    upload = logged_in_client.post(
+        "/perfil/avatar",
+        files={"avatar": ("yo.png", _png_bytes(), "image/png")},
+        follow_redirects=False,
+    )
+    assert upload.status_code == 303
+
+    from makeros.db import connect
+
+    conn = connect(settings.db_path)
+    avatar = conn.execute("SELECT avatar FROM users WHERE username = 'jacob'").fetchone()[0]
+    conn.close()
+    assert avatar == "avatars/jacob.png"
+    assert (settings.content_dir / "_uploads" / avatar).is_file()
+
+    served = logged_in_client.get(f"/media/{avatar}")
+    assert served.status_code == 200
+    assert served.headers["content-type"].startswith("image/png")
+
+    home = logged_in_client.get("/")
+    assert f'src="/media/{avatar}"' in home.text  # sidebar shows the picture
+
+    removed = logged_in_client.post(
+        "/perfil/avatar/quitar", follow_redirects=False
+    )
+    assert removed.status_code == 303
+    assert not (settings.content_dir / "_uploads" / avatar).exists()
+
+    conn = connect(settings.db_path)
+    assert conn.execute("SELECT avatar FROM users WHERE username = 'jacob'").fetchone()[0] == ""
+    conn.close()
+
+
+def test_profile_avatar_rejects_bad_extension(logged_in_client: TestClient):
+    bad = logged_in_client.post(
+        "/perfil/avatar",
+        files={"avatar": ("script.svg", b"<svg/>", "image/svg+xml")},
+    )
+    assert bad.status_code == 400
+
+
+def test_profile_changes_display_name_and_password(
+    logged_in_client: TestClient, settings
+):
+    name = logged_in_client.post(
+        "/perfil/datos", data={"display_name": "Jacob Lab"}, follow_redirects=False
+    )
+    assert name.status_code == 303
+    home = logged_in_client.get("/")
+    assert "Jacob Lab" in home.text
+
+    wrong = logged_in_client.post(
+        "/perfil/clave", data={"current": "incorrecta", "password": "nueva-clave9"}
+    )
+    assert "no coincide" in wrong.text
+
+    ok = logged_in_client.post(
+        "/perfil/clave",
+        data={"current": "secreto123", "password": "nueva-clave9"},
+        follow_redirects=False,
+    )
+    assert ok.status_code == 200
+    assert "actualizada" in ok.text
+
+    fresh = TestClient(logged_in_client.app)
+    logged = fresh.post(
+        "/login", data={"username": "jacob", "password": "nueva-clave9"},
+        follow_redirects=False,
+    )
+    assert logged.status_code == 303
+
+
+def test_admin_rebuilds_index(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "wiki" / "reindex-prueba.md", {"title": "Prueba Reindex"})
+    _reindex(settings)
+    response = logged_in_client.post("/admin/reindex", follow_redirects=False)
+    assert response.status_code == 303
+
+    from makeros.db import connect
+
+    conn = connect(settings.db_path)
+    row = conn.execute(
+        "SELECT title FROM documents WHERE path = 'wiki/reindex-prueba'"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+
+
+def test_admin_sets_theme(logged_in_client: TestClient, settings):
+    response = logged_in_client.post(
+        "/admin/tema", data={"accent": "indigo", "fondo": "cuadricula"}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    home = logged_in_client.get("/")
+    assert 'data-accent="indigo"' in home.text
+    assert 'data-bg="cuadricula"' in home.text
+
+    bad = logged_in_client.post("/admin/tema", data={"accent": "verde", "fondo": "blanco"})
+    assert bad.status_code == 400
+
+    reset = logged_in_client.post(
+        "/admin/tema", data={"accent": "rojo", "fondo": "blanco"}, follow_redirects=False
+    )
+    assert reset.status_code == 303
+    home = logged_in_client.get("/")
+    assert 'data-accent="rojo"' in home.text
+
+
+# ---------- Google Calendar sync ----------
+
+def test_gcal_auth_url_shape():
+    from makeros.web import gcal
+
+    url = gcal.auth_url("mi-cliente", "https://fedora.tail120260.ts.net/google/callback")
+    assert "accounts.google.com" in url
+    assert "client_id=mi-cliente" in url
+    assert "access_type=offline" in url
+    assert "prompt=consent" in url
+    assert "calendar.events" in url
+    assert "redirect_uri=https%3A%2F%2Ffedora.tail120260.ts.net%2Fgoogle%2Fcallback" in url
+
+
+def test_gcal_sync_pull_and_push(settings, monkeypatch):
+    from makeros.web import event_store, gcal
+
+    # Local event born in MakerOS: must be pushed.
+    _add_event(settings, "Taller local", "2026-11-10 15:00", "2026-11-10 17:00")
+
+    import dataclasses
+
+    from makeros.db import connect, init_schema
+    from makeros.ui import set_ui
+
+    settings = dataclasses.replace(
+        settings, google_client_id="cid", google_client_secret="secret"
+    )
+
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    event_store.ensure_schema(conn)
+    set_ui(conn, gcal.KEY_REFRESH, "refresh-token")
+    set_ui(conn, gcal.KEY_CALENDAR, "cal-123")
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+            self.status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.payload
+
+    google_events = {
+        "items": [
+            {
+                "id": "g-1",
+                "summary": "Reunión remota",
+                "start": {"dateTime": "2026-11-05T10:00:00-05:00"},
+                "end": {"dateTime": "2026-11-05T11:00:00-05:00"},
+                "location": "Sala CAUCE",
+                "htmlLink": "https://calendar.google.com/x",
+            },
+            {"id": "g-2", "summary": "Borrado en Google", "status": "cancelled"},
+        ],
+        "nextSyncToken": "sync-1",
+    }
+
+    def fake_api_get(url, headers, params=None):
+        assert url.endswith("/calendars/cal-123/events")
+        if "syncToken" in (params or {}):
+            return FakeResponse({"items": [], "nextSyncToken": "sync-2"})
+        return FakeResponse(google_events)
+
+    created = []
+
+    def fake_api_post(url, headers, json_body):
+        created.append(json_body)
+        # Google echoes the created event back, id included.
+        return FakeResponse({"id": "g-local-1", **json_body})
+
+    def fake_refresh(client_id, client_secret, refresh_token):
+        assert refresh_token == "refresh-token"
+        return "access-ok"
+
+    monkeypatch.setattr(gcal, "api_get", fake_api_get)
+    monkeypatch.setattr(gcal, "api_post", fake_api_post)
+    monkeypatch.setattr(gcal, "refresh_access", fake_refresh)
+
+    result = gcal.sync(conn, settings)
+    assert result.error == ""
+    assert result.pulled == 1
+    assert result.pushed == 1
+    assert result.deleted == 1  # g-2 was cancelled
+
+    # Pulled event became a Google-format row.
+    pulled = event_store.get_event(conn, "g-1")
+    assert pulled["summary"] == "Reunión remota"
+    assert pulled["location"] == "Sala CAUCE"
+    assert pulled["start"].strftime("%Y-%m-%d %H:%M") == "2026-11-05 10:00"
+    assert pulled["html_link"] == "https://calendar.google.com/x"
+
+    # Pushed local event got Google's id.
+    pushed = event_store.get_event(conn, "g-local-1")
+    assert pushed["summary"] == "Taller local"
+    assert created[0]["summary"] == "Taller local"
+    assert created[0]["start"]["dateTime"].startswith("2026-11-10T15:00")
+
+    from makeros.ui import get_ui
+
+    assert get_ui(conn, gcal.KEY_SYNC) == "sync-1"
+    conn.close()
+
+
+def test_gcal_admin_shows_connect(logged_in_client, monkeypatch):
+    from makeros.web import gcal
+
+    monkeypatch.setattr(gcal, "is_configured", lambda conn, settings: True)
+    page = logged_in_client.get("/admin")
+    assert "Conectar con Google" in page.text
+
+
+def test_gcal_credentials_saved_via_panel(logged_in_client, settings):
+    response = logged_in_client.post(
+        "/google/credenciales",
+        data={"client_id": "abc.apps.googleusercontent.com", "client_secret": "GOCSPX-x"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from makeros.db import connect
+    from makeros.ui import get_ui
+
+    conn = connect(settings.db_path)
+    assert get_ui(conn, "gcal:client_id") == "abc.apps.googleusercontent.com"
+    assert get_ui(conn, "gcal:client_secret") == "GOCSPX-x"
+    conn.close()
+    # With credentials in place, the panel shows the OAuth button.
+    page = logged_in_client.get("/admin")
+    assert "Conectar con Google" in page.text
+
+
+# ---------- Event categories ----------
+
+def test_default_categories_seeded_and_chips_colored(logged_in_client, settings):
+    from makeros.db import connect
+    from makeros.web import event_store
+
+    conn = connect(settings.db_path)
+    cats = event_store.list_categories(conn)
+    conn.close()
+    labels = {c["id"] for c in cats}
+    assert {"reunion", "taller", "proyecto", "otro"} <= labels
+
+    _add_event(settings, "Taller de robótica", "2026-11-20 15:00", category="taller")
+    page = logged_in_client.get("/calendario?m=2026-11")
+    assert "Taller de robótica" in page.text
+    # Chip tinted with the taller color (logo orange).
+    assert "color-mix(in srgb, #f4991f" in page.text
+    # Upcoming list shows the category label.
+    assert "Taller" in page.text
+
+
+def test_create_event_with_category(logged_in_client, settings):
+    response = logged_in_client.post(
+        "/calendario/nuevo",
+        data={
+            "title": "Junta directiva",
+            "start": "2026-12-01 09:00",
+            "end": "2026-12-01 10:00",
+            "location": "Sala 2",
+            "category": "reunion",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from makeros.db import connect
+    from makeros.web import event_store
+
+    conn = connect(settings.db_path)
+    event = event_store.get_event(
+        conn, response.headers["location"].rsplit("/", 1)[-1]
+    )
+    conn.close()
+    assert event["category"] == "reunion"
+    detail = logged_in_client.get(response.headers["location"])
+    assert "Reunión" in detail.text
+
+
+def test_category_roundtrips_through_google(settings, monkeypatch):
+    from makeros.web import event_store, gcal
+
+    _add_event(settings, "Charla invitada", "2026-12-05 17:00", category="taller")
+
+    import dataclasses
+
+    from makeros.db import connect, init_schema
+    from makeros.ui import set_ui
+
+    settings = dataclasses.replace(
+        settings, google_client_id="cid", google_client_secret="secret"
+    )
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    event_store.ensure_schema(conn)
+    set_ui(conn, gcal.KEY_REFRESH, "refresh-token")
+    set_ui(conn, gcal.KEY_CALENDAR, "cal-123")
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+            self.status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.payload
+
+    pushed_bodies = []
+
+    def fake_api_post(url, headers, json_body):
+        pushed_bodies.append(json_body)
+        return FakeResponse({"id": "g-push-1", **json_body})
+
+    def fake_api_get(url, headers, params=None):
+        return FakeResponse({
+            "items": [
+                {
+                    "id": "g-pull-1",
+                    "summary": "Evento desde Google",
+                    "start": {"date": "2026-12-24"},
+                    "end": {"date": "2026-12-25"},
+                    "extendedProperties": {"private": {"category": "reunion"}},
+                }
+            ],
+            "nextSyncToken": "s1",
+        })
+
+    monkeypatch.setattr(gcal, "api_get", fake_api_get)
+    monkeypatch.setattr(gcal, "api_post", fake_api_post)
+    monkeypatch.setattr(gcal, "refresh_access", lambda *a: "access")
+
+    result = gcal.sync(conn, settings)
+    assert result.error == ""
+    # Push carried the category in Google's private properties.
+    assert pushed_bodies[0]["extendedProperties"]["private"]["category"] == "taller"
+    # Pull read it back from Google.
+    pulled = event_store.get_event(conn, "g-pull-1")
+    assert pulled["category"] == "reunion"
+    conn.close()
+
+
+def test_admin_manages_categories(logged_in_client, settings):
+    response = logged_in_client.post(
+        "/admin/categorias", data={"label": "Social", "color": "#3d8a52"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    page = logged_in_client.get("/admin")
+    assert "Social" in page.text
+
+    from makeros.db import connect
+    from makeros.web import event_store
+
+    conn = connect(settings.db_path)
+    cats = {c["id"]: c for c in event_store.list_categories(conn)}
+    assert "social" in cats
+    # Deleting clears it from events too.
+    _add_event(settings, "Fiesta fin de año", "2026-12-20 20:00", category="social")
+    deleted = logged_in_client.post(
+        "/admin/categorias/social/eliminar", follow_redirects=False
+    )
+    assert deleted.status_code == 303
+    row = conn.execute(
+        "SELECT category FROM calendar_events WHERE summary = 'Fiesta fin de año'"
+    ).fetchone()
+    conn.close()
+    assert row["category"] == ""
+
+    bad = logged_in_client.post(
+        "/admin/categorias", data={"label": "Rara", "color": "#ff00ff"}
+    )
+    assert bad.status_code == 400
+
+
+# ---------- Image uploads in blocks ----------
+
+def test_block_image_upload_per_collection_and_page(logged_in_client, settings):
+    _write(settings.content_dir / "projects" / "montaje" / "project.md",
+           {"name": "Montaje"}, "Cuerpo del proyecto.")
+    _reindex(settings)
+    response = logged_in_client.post(
+        "/projects/montaje/project/imagenes",
+        files={"archivo": ("Foto panel.png", _png_bytes(), "image/png")},
+    )
+    assert response.status_code == 200
+    url = response.json()["url"]
+    assert url.startswith("/media/projects/montaje/project/")
+    assert url.endswith(".png")
+    # Stored under the page's own folder, as requested.
+    stored = settings.content_dir / "_uploads" / "projects" / "montaje" / "project"
+    assert any(stored.iterdir())
+    # Served back through the login-gated media route.
+    served = logged_in_client.get(url)
+    assert served.status_code == 200
+    assert served.headers["content-type"].startswith("image/png")
+
+
+def test_block_image_upload_rejects_bad_and_viewers(logged_in_client, settings):
+    bad = logged_in_client.post(
+        "/wiki/inicio/imagenes",
+        files={"archivo": ("malo.svg", b"<svg/>", "image/svg+xml")},
+    )
+    assert bad.status_code == 400
+
+    from makeros import auth
+    from makeros.db import connect, init_schema
+
+    conn = connect(settings.db_path)
+    init_schema(conn)
+    auth.create_user(conn, "lector", "clave123", role="viewer")
+    conn.close()
+    logged_in_client.post("/logout")
+    logged_in_client.post("/login", data={"username": "lector", "password": "clave123"})
+    denied = logged_in_client.post(
+        "/wiki/inicio/imagenes",
+        files={"archivo": ("x.png", _png_bytes(), "image/png")},
+    )
+    assert denied.status_code == 403
+
+
+def test_image_block_form_offers_upload_and_size(logged_in_client, settings):
+    _write(
+        settings.content_dir / "wiki" / "galeria.md",
+        {"title": "Galería"},
+        "![Foto vieja|mediana](/media/wiki/galeria/foto.png)",
+    )
+    _reindex(settings)
+    form = logged_in_client.get("/wiki/galeria/bloques/0/editar")
+    assert form.status_code == 200
+    assert "Subir imagen" in form.text
+    assert "Usar URL" in form.text
+    assert "Tamaño" not in form.text  # size is set by dragging, not a select
+
+
+def test_image_size_token_renders_as_class():
+    from makeros.web.render import render_markdown
+
+    html = render_markdown("![Panel|pequena](/media/x/panel.png)")
+    assert 'class="img-pequena"' in html
+    assert 'alt="Panel"' in html
+    plain = render_markdown("![Panel](/media/x/panel.png)")
+    assert "img-pequena" not in plain and 'alt="Panel"' in plain
+
+
+def test_adding_image_block_opens_editor_with_upload_menu(logged_in_client, settings):
+    _write(settings.content_dir / "wiki" / "fotos.md", {"title": "Fotos"}, "Un párrafo.")
+    _reindex(settings)
+    response = logged_in_client.post(
+        "/wiki/fotos/bloques/nuevo",
+        data={"tipo": "imagen", "despues": "-1"},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    # The editor opens immediately: upload + URL + size tools present.
+    assert "Subir imagen" in response.text
+    assert "Usar URL" in response.text
+    assert "Descripción de la imagen" in response.text  # seed text inside
+
+
+def test_adding_text_block_renders_in_place(logged_in_client, settings):
+    _write(settings.content_dir / "wiki" / "texto.md", {"title": "Texto"}, "Base.")
+    _reindex(settings)
+    response = logged_in_client.post(
+        "/wiki/texto/bloques/nuevo",
+        data={"tipo": "parrafo", "despues": "0"},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    # Non-image blocks land rendered, not in edit mode.
+    assert "bloques/nuevo" in response.text  # block menu present
+    assert 'id="block-' in response.text
+
+
+def test_resize_image_block_endpoint(logged_in_client, settings):
+    _write(
+        settings.content_dir / "wiki" / "ajuste.md",
+        {"title": "Ajuste"},
+        "![Panel](/media/wiki/ajuste/panel.png)",
+    )
+    _reindex(settings)
+    response = logged_in_client.post(
+        "/wiki/ajuste/bloques/0/tamano", data={"tamano": "mediana"}
+    )
+    assert response.status_code == 200
+    assert 'class="img-mediana"' in response.text
+
+    from makeros import frontmatter
+
+    meta, body = frontmatter.read(settings.content_dir / "wiki" / "ajuste.md")
+    assert "|mediana" in body
+
+    # Resizing keeps an existing token instead of stacking them.
+    response = logged_in_client.post(
+        "/wiki/ajuste/bloques/0/tamano", data={"tamano": "pequena"}
+    )
+    assert response.status_code == 200
+    meta, body = frontmatter.read(settings.content_dir / "wiki" / "ajuste.md")
+    assert "pequena" in body and "mediana" not in body
+
+    # Freeform tiny sizes: any integer 5-100 sticks.
+    tiny = logged_in_client.post(
+        "/wiki/ajuste/bloques/0/tamano", data={"tamano": "12"}
+    )
+    assert tiny.status_code == 200
+    assert "width:12%" in tiny.text
+    from makeros import frontmatter as fm
+
+    _, body = fm.read(settings.content_dir / "wiki" / "ajuste.md")
+    assert "|12" in body
+
+    bad = logged_in_client.post(
+        "/wiki/ajuste/bloques/0/tamano", data={"tamano": "enorme"}
+    )
+    assert bad.status_code == 400
+    too_big = logged_in_client.post(
+        "/wiki/ajuste/bloques/0/tamano", data={"tamano": "250"}
+    )
+    assert too_big.status_code == 400
+
+
+# ---------- Wiki vault: folders, navigation, moves, graph ----------
+
+def test_vault_folder_creation_and_navigation(logged_in_client, settings):
+    created = logged_in_client.post(
+        "/wiki/carpeta", data={"ruta": "guias/impresion"}, follow_redirects=False
+    )
+    assert created.status_code == 303
+    assert created.headers["location"] == "/wiki/guias/impresion"
+    assert (settings.content_dir / "wiki" / "guias" / "impresion").is_dir()
+
+    folder = logged_in_client.get("/wiki/guias/impresion", follow_redirects=False)
+    # A folder URL redirects to the scoped card view.
+    assert folder.status_code == 303
+    assert folder.headers["location"] == "/wiki?carpeta=guias/impresion"
+    scoped = logged_in_client.get(folder.headers["location"])
+    assert scoped.status_code == 200
+    assert "vault-breadcrumb" in scoped.text
+    assert 'href="/wiki?carpeta=guias"' in scoped.text
+
+    bad = logged_in_client.post("/wiki/carpeta", data={"ruta": "../mal"})
+    assert bad.status_code == 400
+
+
+def test_create_wiki_page_inside_folder(logged_in_client, settings):
+    response = logged_in_client.post(
+        "/wiki/nuevo",
+        data={"title": "Calibrar la Prusa", "ruta": "guias/impresion",
+              "body": "Pasos de calibración."},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/wiki/guias/impresion/calibrar-la-prusa"
+    assert (settings.content_dir / "wiki" / "guias" / "impresion"
+            / "calibrar-la-prusa.md").is_file()
+
+    # The card view shows the new page; the tree nests it in its folder.
+    wiki = logged_in_client.get("/wiki")
+    assert "Calibrar la Prusa" in wiki.text
+    tree = logged_in_client.get("/wiki?vista=arbol")
+    assert "vault-folder" in tree.text
+
+
+def test_move_page_rewrites_wikilinks(logged_in_client, settings):
+    _write(settings.content_dir / "wiki" / "origen.md",
+           {"title": "Origen"}, "Contenido.")
+    _write(settings.content_dir / "wiki" / "enlazador.md",
+           {"title": "Enlazador"}, "Mira [[origen]] y [[origen|la página]].")
+    _reindex(settings)
+
+    moved = logged_in_client.post(
+        "/wiki/origen/mover",
+        data={"nueva_ruta": "guias/movida"},
+        follow_redirects=False,
+    )
+    assert moved.status_code == 303
+    assert moved.headers["location"] == "/wiki/guias/movida"
+    assert (settings.content_dir / "wiki" / "guias" / "movida.md").is_file()
+    assert not (settings.content_dir / "wiki" / "origen.md").exists()
+
+    from makeros import frontmatter
+
+    _, body = frontmatter.read(settings.content_dir / "wiki" / "enlazador.md")
+    assert "[[guias/movida]]" in body
+    assert "[[guias/movida|la página]]" in body
+    assert "[[origen]]" not in body
+
+    # Old URL is gone; new one renders with rewritten links working.
+    assert logged_in_client.get("/wiki/origen").status_code == 404
+    fresh = logged_in_client.get("/wiki/enlazador")
+    assert 'href="/wiki/guias/movida"' in fresh.text
+
+
+def test_wiki_graph_shows_nodes_and_edges(logged_in_client, settings):
+    _write(settings.content_dir / "wiki" / "nodo-a.md",
+           {"title": "Nodo A"}, "Sobre [[nodo-b]] y [[wiki/nodo-c]].")
+    _write(settings.content_dir / "wiki" / "nodo-b.md",
+           {"title": "Nodo B"}, "Vuelve a [[nodo-a]].")
+    _reindex(settings)
+
+    page = logged_in_client.get("/wiki/grafos")
+    assert page.status_code == 200
+    assert "graph-canvas" in page.text
+    assert '"Nodo A"' in page.text
+    assert '"source": "wiki/nodo-a"' in page.text
+    assert '"target": "wiki/nodo-b"' in page.text
+
+
+def test_assistant_page_shows_offline_state(logged_in_client):
+    page = logged_in_client.get("/asistente")
+    assert page.status_code == 200
+    assert "Modelo sin configurar" in page.text
+    assert "/asistente/preguntar" in page.text
+
+
+def test_assistant_answer_with_local_model(logged_in_client, settings, monkeypatch):
+    _write(settings.content_dir / "wiki" / "prusa.md",
+           {"title": "Prusa"}, "La Prusa se calibra con el paso a paso.")
+    _reindex(settings)
+
+    from makeros.web import llm
+
+    monkeypatch.setattr(llm, "chat", lambda conn, messages: "La [[prusa]] se calibra así.")
+    response = logged_in_client.post(
+        "/asistente/preguntar", data={"pregunta": "cómo calibrar la prusa"}
+    )
+    assert response.status_code == 200
+    assert "La <a href=\"/wiki/prusa\"" in response.text
+    assert 'href="/wiki/prusa"' in response.text  # source chip
+    assert "Guardar como página" in response.text
+
+
+def test_assistant_offline_when_model_unreachable(logged_in_client, settings, monkeypatch):
+    from makeros.web import llm
+
+    monkeypatch.setattr(llm, "chat", lambda conn, messages: None)
+    response = logged_in_client.post(
+        "/asistente/preguntar", data={"pregunta": "qué es MakerOS"}
+    )
+    assert response.status_code == 200
+    assert "modelo no está disponible" in response.text
+
+
+def test_assistant_save_creates_wiki_page(logged_in_client, settings):
+    saved = logged_in_client.post(
+        "/asistente/guardar",
+        data={"respuesta": "Respuesta del asistente.", "ruta": "guias/resumen"},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/wiki/guias/resumen"
+    file = settings.content_dir / "wiki" / "guias" / "resumen.md"
+    assert file.is_file()
+    assert "Respuesta del asistente." in file.read_text(encoding="utf-8")
+
+    bad = logged_in_client.post(
+        "/asistente/guardar", data={"respuesta": "x", "ruta": "../mal"}
+    )
+    assert bad.status_code == 400
+
+
+def test_move_folder_moves_pages_and_rewrites_links(logged_in_client, settings):
+    _write(settings.content_dir / "wiki" / "viejo" / "pagina.md",
+           {"title": "Página"}, "Contenido.")
+    _write(settings.content_dir / "wiki" / "enlazador.md",
+           {"title": "Enlazador"}, "Mira [[viejo/pagina]].")
+    _reindex(settings)
+
+    moved = logged_in_client.post(
+        "/wiki/carpeta/viejo/mover", data={"destino": "archivo"},
+        follow_redirects=False,
+    )
+    assert moved.status_code == 303
+    assert moved.headers["location"] == "/wiki/archivo/viejo"
+    assert (settings.content_dir / "wiki" / "archivo" / "viejo" / "pagina.md").is_file()
+    assert not (settings.content_dir / "wiki" / "viejo").exists()
+
+    from makeros import frontmatter
+
+    _, body = frontmatter.read(settings.content_dir / "wiki" / "enlazador.md")
+    assert "[[archivo/viejo/pagina]]" in body
+
+    # A folder cannot be moved into itself.
+    denied = logged_in_client.post(
+        "/wiki/carpeta/archivo/mover", data={"destino": "archivo/viejo"}
+    )
+    assert denied.status_code == 400
+
+
+def test_split_view_renders_panes(logged_in_client: TestClient):
+    response = logged_in_client.get("/dividir?p=wiki/inicio&p=wiki/grafos")
+    assert response.status_code == 200
+    assert 'src="/wiki/inicio?panel=1"' in response.text
+    assert 'src="/wiki/grafos?panel=1"' in response.text
+    # No panes: the wiki navigator alone.
+    default = logged_in_client.get("/dividir")
+    assert 'src="/wiki?panel=1"' in default.text
+
+
+def test_panel_mode_hides_sidebar(logged_in_client: TestClient):
+    response = logged_in_client.get("/wiki/inicio?panel=1")
+    assert response.status_code == 200
+    assert 'class="sidebar"' not in response.text
+    assert "content-panel" in response.text
+    # Normal render keeps the sidebar.
+    normal = logged_in_client.get("/wiki/inicio")
+    assert 'class="sidebar"' in normal.text
+
+
+def test_sidebar_hides_people_and_shows_assistant(logged_in_client: TestClient):
+    response = logged_in_client.get("/")
+    assert '<a class="nav-item" href="/people">' not in response.text
+    assert 'href="/asistente"' in response.text
+
+
+def test_assignment_forms_list_people(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "people" / "ana.md", {"title": "Ana"}, "Skills.")
+    _reindex(settings)
+    tasks = logged_in_client.get("/tasks/nuevo")
+    assert '<option value="ana">Ana</option>' in tasks.text
+    project = logged_in_client.get("/projects/nuevo")
+    assert '<option value="ana">Ana</option>' in project.text
+    event_form = logged_in_client.get("/calendario/nuevo")
+    assert '<option value="ana">Ana</option>' in event_form.text
+
+
+def test_event_created_with_assigned_people(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "people" / "ana.md", {"title": "Ana"}, "Skills.")
+    _reindex(settings)
+    response = logged_in_client.post(
+        "/calendario/nuevo",
+        data={"title": "Reunión de planeación", "start": "2026-11-05 10:00",
+              "people": "ana", "category": "reunion"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    from makeros.db import connect
+
+    conn = connect(settings.db_path)
+    row = conn.execute(
+        "SELECT people FROM calendar_events ORDER BY rowid DESC LIMIT 1"
+    ).fetchone()
+    assert row["people"] == "ana"
+    conn.close()
+
+    # The event page shows the person as a chip.
+    event_url = response.headers["location"]
+    page = logged_in_client.get(event_url)
+    assert 'href="/people/ana"' in page.text
+
+
+def test_greeting_rotates_by_date():
+    from datetime import date
+
+    from makeros.web.greetings import GREETINGS, greeting_for
+
+    assert "Ana" in greeting_for("Ana", date(2026, 10, 26))
+    assert greeting_for("Ana", date(2026, 10, 26)) == greeting_for("Ana", date(2026, 10, 26))
+    assert len(GREETINGS) == 30
+
+
+def test_kanban_is_default_for_tasks(logged_in_client: TestClient, settings):
+    _seed_tasks(settings)
+    response = logged_in_client.get("/tasks")
+    assert 'class="kanban"' in response.text
+    # Cards carry the quick-edit modal trigger.
+    assert "kanban-edit" in response.text
+    assert "/editar?fragmento=1" in response.text
+
+
+def test_new_form_fragment_renders_for_modal(logged_in_client: TestClient):
+    response = logged_in_client.get("/tasks/nuevo?fragmento=1")
+    assert response.status_code == 200
+    assert "<!doctype" not in response.text
+    assert 'hx-post="/tasks/nuevo"' in response.text
+    assert 'data-modal-title' in response.text
+
+
+def test_modal_create_task_via_htmx(logged_in_client: TestClient, settings):
+    response = logged_in_client.post(
+        "/tasks/nuevo",
+        data={"title": "Tarea desde modal", "status": "todo", "priority": "high"},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    assert "makerosCloseModal()" in response.text
+    assert (settings.content_dir / "tasks" / "tarea-desde-modal.md").is_file()
+
+
+def test_modal_create_error_rerenders_fragment(logged_in_client: TestClient):
+    response = logged_in_client.post(
+        "/tasks/nuevo",
+        data={"title": "Tarea mala", "due": "no-es-fecha"},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    assert "Fecha inválida" in response.text
+    assert 'hx-post="/tasks/nuevo"' in response.text
+
+
+def test_task_edit_modal_roundtrip(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "tasks" / "editar-me.md",
+           {"title": "Editar me", "status": "todo", "assignee": "", "priority": ""},
+           "Contexto.")
+    _reindex(settings)
+
+    form = logged_in_client.get("/tasks/editar-me/editar?fragmento=1")
+    assert form.status_code == 200
+    assert 'value="Editar me"' in form.text
+    assert 'hx-post="/tasks/editar-me/editar"' in form.text
+
+    saved = logged_in_client.post(
+        "/tasks/editar-me/editar",
+        data={"title": "Editar me", "status": "done", "priority": "high",
+              "assignee": "", "project": "", "due": ""},
+        headers={"HX-Request": "true"},
+    )
+    assert saved.status_code == 200
+    assert "makerosCloseModal()" in saved.text
+
+    from makeros import frontmatter
+
+    meta, _body = frontmatter.read(settings.content_dir / "tasks" / "editar-me.md")
+    assert meta["status"] == "done"
+    assert meta["priority"] == "high"
+
+    bad = logged_in_client.post(
+        "/tasks/editar-me/editar",
+        data={"title": "X", "status": "estado-falso", "priority": "", "assignee": "",
+              "project": "", "due": ""},
+        headers={"HX-Request": "true"},
+    )
+    assert "Estado no válido" in bad.text
+
+
+def test_admin_user_modal_flow(logged_in_client: TestClient):
+    form = logged_in_client.get("/admin/usuarios/nuevo?fragmento=1")
+    assert form.status_code == 200
+    assert 'hx-post="/admin/usuarios"' in form.text
+
+    created = logged_in_client.post(
+        "/admin/usuarios",
+        data={"username": "nuevo", "password": "clavebuena8", "role": "member"},
+        headers={"HX-Request": "true"},
+    )
+    assert created.status_code == 200
+    assert "makerosCloseModal()" in created.text
+
+    duplicate = logged_in_client.post(
+        "/admin/usuarios",
+        data={"username": "nuevo", "password": "clavebuena8"},
+        headers={"HX-Request": "true"},
+    )
+    assert "ese usuario ya existe" in duplicate.text
+
+
+def test_sidebar_hides_exhibits(logged_in_client: TestClient):
+    response = logged_in_client.get("/")
+    assert '<a class="nav-item" href="/exhibits">' not in response.text
+
+
+
+
+def test_private_notes_vault(logged_in_client: TestClient, settings):
+    from makeros import frontmatter
+
+    home = logged_in_client.get("/notas")
+    assert home.status_code == 200
+    assert "Mis notas" in home.text
+
+    # Create a note with tags inside a folder, via the modal endpoint.
+    created = logged_in_client.post(
+        "/notas/nuevo",
+        data={"title": "Idea de sensor", "carpeta": "ideas", "tags": "pcb, sensor"},
+        headers={"HX-Request": "true"},
+    )
+    assert created.status_code == 200
+    file = settings.private_dir / "jacob" / "ideas" / "idea-de-sensor.md"
+    assert file.is_file()
+
+    # The folder shows on the vault home; the note card carries its tags.
+    home = logged_in_client.get("/notas")
+    assert 'href="/notas/ideas"' in home.text
+    folder_view = logged_in_client.get("/notas/ideas")
+    assert "Idea de sensor" in folder_view.text
+
+    # Tag filter chips come from the notes' frontmatter.
+    assert 'data-tag="pcb"' in folder_view.text
+
+    # The note itself opens with the block editor.
+    note = logged_in_client.get("/notas/ideas/idea-de-sensor")
+    assert note.status_code == 200
+    assert 'data-edit-url="/notas/ideas/idea-de-sensor/bloques/' in note.text
+
+    added = logged_in_client.post(
+        "/notas/ideas/idea-de-sensor/bloques/nuevo",
+        data={"tipo": "parrafo", "despues": "-1"},
+        headers={"HX-Request": "true"},
+    )
+    assert added.status_code == 200
+    _meta, body = frontmatter.read(file)
+    assert len(body) > 20
+
+    # Traversal outside the private root is rejected.
+    bad = logged_in_client.get("/notas/../etc")
+    assert bad.status_code in (400, 404)
+
+    # Private notes never leak into the shared search index.
+    frontmatter.write(file, {"title": "Idea de sensor"}, "secreto-confidencial-xyz")
+    search = logged_in_client.get("/search?q=secreto-confidencial-xyz")
+    assert "0 resultado(s)" in search.text
+    assert "result-snippet" not in search.text
+def test_explorer_shows_all_content(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "tasks" / "explorar-me.md", {"title": "Explorar me"}, "Tarea.")
+    _write(settings.content_dir / "wiki" / "guias" / "profundas" / "nota.md",
+           {"title": "Nota profunda"}, "Anidada.")
+    _reindex(settings)
+
+    page = logged_in_client.get("/explorador")
+    assert page.status_code == 200
+    assert 'href="/tasks/explorar-me"' in page.text
+    assert "Nota profunda" in page.text
+    # Folders render as tree nodes.
+    assert "guias" in page.text
+
+
+def test_home_has_avisos_board_and_week(logged_in_client: TestClient, settings):
+    response = logged_in_client.get("/")
+    assert response.status_code == 200
+    assert "Avisos" in response.text
+    assert "Esta semana" in response.text
+    assert (settings.content_dir / "avisos" / "tablero.md").is_file()
+    assert 'href="/avisos/tablero"' in response.text
+
+
+def test_pin_page_shows_on_home(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "tasks" / "fijame.md",
+           {"title": "Fijame", "status": "todo"}, "Tarea importante.")
+    _reindex(settings)
+
+    pinned = logged_in_client.post("/tasks/fijame/fijar", follow_redirects=False)
+    assert pinned.status_code == 303
+    from makeros import frontmatter
+
+    meta, _body = frontmatter.read(settings.content_dir / "tasks" / "fijame.md")
+    assert meta["pinned"] is True
+
+    home = logged_in_client.get("/")
+    assert 'href="/tasks/fijame"' in home.text
+    assert "Fijado" in home.text
+
+    unpinned = logged_in_client.post("/tasks/fijame/fijar", follow_redirects=False)
+    assert unpinned.status_code == 303
+    home = logged_in_client.get("/")
+    assert "Fijado" not in home.text
+
+
+def test_week_events_on_home(logged_in_client: TestClient, settings):
+    from datetime import date
+
+    today = date.today().isoformat()
+    _add_event(settings, "Taller de hoy", f"{today} 15:00")
+    response = logged_in_client.get("/")
+    assert "Taller de hoy" in response.text
+    assert 'href="/calendario' in response.text
+
+
+def test_sidebar_has_notes_explorer_avisos(logged_in_client: TestClient):
+    response = logged_in_client.get("/")
+    assert 'href="/notas"' in response.text
+    assert 'href="/explorador"' in response.text
+    assert "Editar tablero" in response.text  # avisos lives on home now
+
+
+def test_blocks_are_click_to_edit(logged_in_client: TestClient):
+    """Obsidian-style editing: rendered blocks carry their edit URL."""
+    response = logged_in_client.get("/wiki/inicio")
+    assert 'data-edit-url="/wiki/inicio/bloques/' in response.text
+
+
+def test_research_folders_and_tag_filter(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "research" / "impresion" / "klipper.md",
+           {"title": "Klipper", "tags": ["firmware"]}, "Repo de firmware.")
+    _write(settings.content_dir / "research" / "marlin.md", {"title": "Marlin"}, "Repo.")
+    _reindex(settings)
+
+    page = logged_in_client.get("/research")
+    assert 'href="/research?carpeta=impresion"' in page.text
+    assert 'data-tag="firmware"' in page.text
+
+    scoped = logged_in_client.get("/research?carpeta=impresion")
+    assert "Klipper" in scoped.text
+    assert "Marlin" not in scoped.text
+
+    # Notes born inside a folder via the creation modal.
+    created = logged_in_client.post(
+        "/research/nuevo",
+        data={"title": "Voron Docs", "ruta": "impresion", "body": ""},
+        headers={"HX-Request": "true"},
+    )
+    assert created.status_code == 200
+    assert (settings.content_dir / "research" / "impresion" / "voron-docs.md").is_file()
+
+
+def test_avisos_board_live_polling(logged_in_client: TestClient):
+    """The home board refreshes itself via polling (no page reload)."""
+    home = logged_in_client.get("/")
+    assert 'hx-get="/avisos/tablero/contenido"' in home.text
+    assert "every 15s" in home.text
+    endpoint = logged_in_client.get("/avisos/tablero/contenido")
+    assert endpoint.status_code == 200
+    assert "<!doctype" not in endpoint.text  # fragment, not a page
+
+
+def test_explorer_views_and_address_bar(logged_in_client: TestClient, settings):
+    _write(settings.content_dir / "research" / "impresion" / "vorn.md",
+           {"title": "Vorn Docs"}, "Repo.")
+    _reindex(settings)
+
+    root = logged_in_client.get("/explorador")
+    assert root.status_code == 200
+    assert "explorer-toolbar" in root.text
+    assert 'href="/explorador?carpeta=wiki"' in root.text
+    # Tree pane always present in card/list views.
+    assert "explorer-tree-pane" in root.text
+
+    cards = logged_in_client.get("/explorador?carpeta=research&vista=tarjetas")
+    assert 'href="/explorador?carpeta=research/impresion&vista=tarjetas"' in cards.text
+
+    inside = logged_in_client.get("/explorador?carpeta=research/impresion&vista=lista")
+    assert "Vorn Docs" in inside.text
+    assert 'href="/research/impresion/vorn"' in inside.text
+
+    # Unknown route falls back to the root instead of a 404.
+    lost = logged_in_client.get("/explorador?carpeta=no/existe")
+    assert lost.status_code == 200
+    assert "explorer-toolbar" in lost.text

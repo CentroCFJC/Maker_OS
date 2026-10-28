@@ -5,16 +5,72 @@
 <section class="home-hero">
   <img src="/static/img/logo.png" alt="" class="hero-logo">
   <div class="hero-text">
-    <h1>Makerspace</h1>
-    <p class="hero-subtitle">Centro de Ciencia FJC — el sistema operativo del laboratorio. Buenas, {{ user["display_name"] or user["username"] }}.</p>
+    <h1>{{ site_name }}</h1>
+    <p class="hero-subtitle">{{ greeting }}</p>
   </div>
   <div class="hero-actions">
     {% if user and user["role"] != "viewer" %}
-    <a class="btn-hero" href="/projects/nuevo">Nuevo proyecto</a>
-    <a class="btn-hero" href="/tasks/nuevo">Nueva tarea</a>
+    <button type="button" class="btn-hero"
+            onclick="makerosOpenModal('/projects/nuevo?fragmento=1')">Nuevo proyecto</button>
+    <button type="button" class="btn-hero"
+            onclick="makerosOpenModal('/tasks/nuevo?fragmento=1')">Nueva tarea</button>
     {% endif %}
   </div>
 </section>
+
+<section class="home-section avisos-section">
+  <div class="home-section-head">
+    <h2>Avisos</h2>
+    {% if user and user["role"] != "viewer" %}
+    <a class="btn-ghost" href="/avisos/tablero">Editar tablero</a>
+    {% endif %}
+  </div>
+  <div class="avisos-board"
+       hx-get="/avisos/tablero/contenido" hx-trigger="every 15s"
+       hx-target="this" hx-swap="innerHTML"
+       title="Se actualiza solo cada pocos segundos">
+    {{ avisos_html | safe }}
+  </div>
+</section>
+
+<section class="home-section week-section">
+  <div class="home-section-head">
+    <h2>Esta semana</h2>
+    <a class="home-more" href="/calendario">Calendario</a>
+  </div>
+  <div class="week-strip">
+    {% for day in week_days %}
+    <div class="week-day{% if day.today %} week-today{% endif %}">
+      <span class="week-day-label">{{ day.label }} {{ day.number }}</span>
+      {% for ev in day.events %}
+      {% set color = cat_colors.get(ev.category or "") %}
+      <a class="week-event" href="/calendario/evento/{{ ev.id }}" title="{{ ev.title }}"
+         {% if color %}style="background: color-mix(in srgb, {{ color }} 18%, var(--card));
+           color: color-mix(in srgb, {{ color }} 85%, var(--text-title));"{% endif %}>
+        {% if ev.time %}<span class="week-event-time">{{ ev.time }}</span>{% endif %}
+        <span class="week-event-title">{{ ev.title }}</span>
+      </a>
+      {% else %}
+      <span class="week-empty">—</span>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% if pinned %}
+<section class="home-section">
+  <h2>Fijado</h2>
+  <div class="chip-row">
+    {% for p in pinned %}
+    <a class="filter-chip" href="{{ p.url }}">{{ p.title }}</a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div class="home-layout">
+<main class="home-main">
 
 <section class="home-section">
   <div class="home-section-head">
@@ -49,7 +105,7 @@
   <h2>Tareas sin proyecto</h2>
   <div class="task-groups">
     {% for status, label in task_status_labels.items() %}
-    <div class="task-group">
+    <div class="task-group task-group-{{ status }}">
       <h3>{{ label }} <span class="count-pill">{{ task_groups.get(status, []) | length }}</span></h3>
       <ul class="task-mini-list">
         {% for task in task_groups.get(status, []) %}
@@ -63,17 +119,22 @@
   </div>
 </section>
 
-<section class="home-section">
-  <h2>Cambios recientes</h2>
-  <ul class="item-list">
-    {% for row in recent %}
-    <li class="item-row">
-      <a class="item-title" href="/{{ row["path"] }}">{{ row["title"] or row["path"] }}</a>
-      <span class="item-meta">{{ collections[row["collection"]]["label"] if row["collection"] in collections else row["collection"] }} · {{ row["indexed_at"] }}</span>
-    </li>
-    {% else %}
-    <li class="item-empty">Nada indexado todavía.</li>
-    {% endfor %}
-  </ul>
-</section>
+</main>
+
+<aside class="home-aside" aria-label="Actividad">
+  <section class="home-section">
+    <h2>Cambios recientes</h2>
+    <ul class="item-list">
+      {% for row in recent %}
+      <li class="item-row">
+        <a class="item-title" href="/{{ row["path"] }}">{{ row["title"] or row["path"] }}</a>
+        <span class="item-meta">{{ collections[row["collection"]]["label"] if row["collection"] in collections else row["collection"] }} · {{ row["indexed_at"] }}</span>
+      </li>
+      {% else %}
+      <li class="item-empty">Nada indexado todavía.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</aside>
+</div>
 {% endblock %}

@@ -11,6 +11,7 @@ from __future__ import annotations
 # icon = default sidebar icon (name in the vendored Feather sprite).
 COLLECTIONS: dict[str, dict[str, str]] = {
     "wiki": {"label": "Wiki", "template": "page.md", "icon": "book-open"},
+    "avisos": {"label": "Avisos", "template": "page.md", "icon": "message-square"},
     "projects": {"label": "Proyectos", "template": "project.md", "icon": "layers"},
     "tasks": {"label": "Tareas", "template": "task.md", "icon": "check-square"},
     "calendario": {"label": "Calendario", "template": "event.md", "icon": "calendar"},
@@ -33,7 +34,6 @@ PROJECT_STATUSES = {
 TASK_STATUSES = {
     "todo": "Pendiente",
     "doing": "En proceso",
-    "blocked": "Bloqueada",
     "done": "Terminada",
 }
 STATUS_LABELS = {**PROJECT_STATUSES, **TASK_STATUSES}
@@ -48,7 +48,6 @@ STATUS_HELP = {
     "archived": "Archivado: se conserva solo como historial.",
     "todo": "Pendiente: todavía sin empezar.",
     "doing": "En proceso: alguien está trabajando en ella.",
-    "blocked": "Bloqueada: espera algo externo para avanzar.",
 }
 # Collections whose index page gets status filter chips.
 STATUS_FILTERS = {"projects": PROJECT_STATUSES, "tasks": TASK_STATUSES}

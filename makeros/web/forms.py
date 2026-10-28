@@ -45,7 +45,7 @@ FORM_FIELDS: dict[str, list[dict]] = {
     "projects": [
         {"name": "title", "kind": "text", "label": "Nombre del proyecto", "required": True},
         {"name": "status", "kind": "select", "label": "Estado", "options": PROJECT_STATUSES},
-        {"name": "lead", "kind": "text", "label": "Responsable (usuario)"},
+        {"name": "lead", "kind": "people", "label": "Responsable"},
         {"name": "start", "kind": "date", "label": "Inicio"},
         {"name": "due", "kind": "date", "label": "Vencimiento"},
         {"name": "banner", "kind": "banner", "label": "Portada"},
@@ -69,7 +69,7 @@ FORM_FIELDS: dict[str, list[dict]] = {
     "tasks": [
         {"name": "title", "kind": "text", "label": "Título de la tarea", "required": True},
         {"name": "project", "kind": "text", "label": "Proyecto (slug, opcional)"},
-        {"name": "assignee", "kind": "text", "label": "Asignada a (usuario)"},
+        {"name": "assignee", "kind": "people", "label": "Asignada a"},
         {"name": "due", "kind": "date", "label": "Vencimiento"},
         {"name": "priority", "kind": "select", "label": "Prioridad", "options": TASK_PRIORITIES},
         {"name": "status", "kind": "select", "label": "Estado", "options": TASK_STATUSES},
@@ -84,6 +84,8 @@ FORM_FIELDS: dict[str, list[dict]] = {
         {"name": "start", "kind": "datetime", "label": "Inicio"},
         {"name": "end", "kind": "datetime", "label": "Fin"},
         {"name": "location", "kind": "text", "label": "Lugar"},
+        {"name": "people", "kind": "people", "label": "Personas asignadas"},
+        {"name": "category", "kind": "event_category", "label": "Categoría"},
         {
             "name": "body",
             "kind": "textarea",

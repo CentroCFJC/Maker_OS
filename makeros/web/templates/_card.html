@@ -12,6 +12,12 @@
   {{ item["dates"] }}</span>
 {% endif %}
 {% if item["extract"] %}<span class="card-extract step-4">{{ item["extract"] }}</span>{% endif %}
+{% if item["tags"] %}
+<div class="chip-row card-tags step-3">
+  {% for tag in item["tags"][:3] %}<span class="page-tag">{{ tag }}</span>{% endfor %}
+  {% if item["tags"] | length > 3 %}<span class="page-tag">+{{ item["tags"] | length - 3 }}</span>{% endif %}
+</div>
+{% endif %}
 {% if item.get("tasks") and item["tasks"]["total"] %}
 {% set pct = (100 * item["tasks"]["done"] / item["tasks"]["total"]) | round | int %}
 <div class="card-progress step-3" title="Tareas terminadas del proyecto">

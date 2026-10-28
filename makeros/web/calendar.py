@@ -11,17 +11,46 @@ from __future__ import annotations
 
 import calendar as _calendar
 import json
+import secrets
+import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from ..indexer import list_collection
+from ..ui import get_ui, set_ui
 
 MONTHS_ES = (
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 )
 WEEKDAYS_ES = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+
+FEED_TOKEN_KEY = "feed:token"
+
+
+def get_feed_token(conn: sqlite3.Connection) -> str:
+    """Feed token for calendar clients; created on first use.
+
+    Calendar apps (Thunderbird, Apple Calendar) cannot log in, so the
+    ICS endpoint accepts `?token=` as an alternative to a session cookie.
+    """
+    token = get_ui(conn, FEED_TOKEN_KEY)
+    if not token:
+        token = secrets.token_urlsafe(24)
+        set_ui(conn, FEED_TOKEN_KEY, token)
+    return token
+
+
+def rotate_feed_token(conn: sqlite3.Connection) -> str:
+    token = secrets.token_urlsafe(24)
+    set_ui(conn, FEED_TOKEN_KEY, token)
+    return token
+
+
+def feed_token_ok(conn: sqlite3.Connection, token: str) -> bool:
+    expected = get_ui(conn, FEED_TOKEN_KEY)
+    return bool(expected) and bool(token) and secrets.compare_digest(token, expected)
 
 
 def parse_when(value) -> date | datetime | None:
@@ -59,6 +88,7 @@ class DayItem:
     title: str
     kind: str  # "event" | "project"
     time: str  # "HH:MM" for timed items, "" otherwise
+    cat: str = ""  # event_categories.id ("proyecto" for milestones)
 
 
 def month_label(year: int, month: int) -> str:
@@ -82,7 +112,11 @@ def parse_month(value: str, today: date) -> tuple[int, int]:
 
 
 def _dated_items(conn, collection: str, kind: str, start_key: str, end_key: str):
-    """Yield (DayItem, start, end) for every document with usable dates."""
+    """Yield (DayItem, start, end) for every document with usable dates.
+
+    Calendar EVENTS no longer come from here — they live in
+    calendar_events (Google format) and are mapped by _event_items().
+    """
     for row in list_collection(conn, collection):
         meta = json.loads(row["meta_json"] or "{}")
         start = parse_when(meta.get(start_key))
@@ -92,13 +126,36 @@ def _dated_items(conn, collection: str, kind: str, start_key: str, end_key: str)
         time = ""
         if isinstance(start, datetime) and (start.hour or start.minute):
             time = start.strftime("%H:%M")
-        yield DayItem(path=row["path"], title=row["title"], kind=kind, time=time), start, end
+        cat = "proyecto" if kind == "project" else ""
+        item = DayItem(path=row["path"], title=row["title"], kind=kind, time=time, cat=cat)
+        yield item, start, end
+
+
+def _event_items(conn):
+    """Yield (DayItem, start, end) for every event in the store."""
+    from . import event_store
+
+    for event in event_store.iter_events(conn):
+        time = ""
+        if isinstance(event["start"], datetime) and (event["start"].hour or event["start"].minute):
+            time = event["start"].strftime("%H:%M")
+        yield (
+            DayItem(
+                path=f"calendario/evento/{event['id']}",
+                title=event["summary"] or "Evento",
+                kind="event",
+                time=time,
+                cat=event["category"],
+            ),
+            event["start"],
+            event["end"] or event["start"],
+        )
 
 
 def day_map(conn) -> dict[date, list[DayItem]]:
     """Events and project milestones mapped to the days they land on."""
     days: dict[date, list[DayItem]] = defaultdict(list)
-    for item, start, end in _dated_items(conn, "calendario", "event", "start", "end"):
+    for item, start, end in _event_items(conn):
         for day in _day_range(to_day(start), to_day(end)):
             days[day].append(item)
     for item, start, end in _dated_items(conn, "projects", "project", "start", "due"):
@@ -143,7 +200,7 @@ def build_ics(conn, stamp: datetime) -> str:
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
     ]
-    for item, start, end in _dated_items(conn, "calendario", "event", "start", "end"):
+    for item, start, end in _event_items(conn):
         # A date-only end paired with a timed start is not valid RFC 5545;
         # treat it as midnight of that day.
         if isinstance(start, datetime) and isinstance(end, date) and not isinstance(end, datetime):
@@ -160,6 +217,8 @@ def build_ics(conn, stamp: datetime) -> str:
             params, value = _ics_stamp(to_day(end) + timedelta(days=1))
         lines.append(f"DTEND{params}:{value}")
         lines.append(f"SUMMARY:{_ics_escape(item.title)}")
+        if item.cat:
+            lines.append(f"CATEGORIES:{item.cat}")
         lines.append(f"URL:/{item.path}")
         lines.append("END:VEVENT")
     lines.append("END:VCALENDAR")

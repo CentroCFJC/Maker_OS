@@ -1,6 +1,8 @@
 {% if user and user["role"] == "admin" %}
 <details class="icon-picker section-icon-picker">
-  <summary>{{ icon(nav_icons.get(collection_slug)) }}<span>Icono de la sección</span></summary>
+  <summary title="Cambiar el icono de {{ collection_label }}">
+    {{ icon(nav_icons.get(collection_slug), cls="icon icon-title") }}
+  </summary>
   <form method="post" action="/ui/icono/{{ collection_slug }}" class="icon-grid-form">
     <input class="icon-search" type="search" placeholder="Filtrar iconos…"
            aria-label="Filtrar iconos de la sección"
@@ -18,4 +20,6 @@
     </div>
   </form>
 </details>
+{% else %}
+{{ icon(nav_icons.get(collection_slug), cls="icon icon-title") }}
 {% endif %}

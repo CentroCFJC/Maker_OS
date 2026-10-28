@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MakerOS — Vista dividida</title>
+  <script>
+    // Restore the theme before first paint (no flash of the wrong mode).
+    (function () {
+      try {
+        var saved = localStorage.getItem("makeros-theme");
+        if (!saved) {
+          saved = window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark" : "light";
+        }
+        document.documentElement.dataset.theme = saved;
+      } catch (e) { /* private mode: default light */ }
+    })();
+  </script>
+  <link rel="icon" href="/static/img/logo.png">
+  <link rel="stylesheet" href="/static/css/makeros.css">
+  <style>
+    /* Standalone frame: no sidebar, the whole window is the layout. */
+    body { margin: 0; background: var(--bg); color: var(--text);
+           font-family: "Schibsted Grotesk", system-ui, sans-serif; }
+    main, .content { margin: 0; }
+  </style>
+</head>
+<body data-accent="{{ theme_accent }}" data-bg="{{ theme_bg }}">
+  <div class="split-view">
+    <div class="split-toolbar">
+      <h1>Vista dividida</h1>
+      {% if panes | length < max_panes %}
+      <button type="button" class="btn-ghost" id="split-add">+ Añadir panel</button>
+      {% endif %}
+      <a class="btn-ghost" href="/wiki">Volver a la wiki</a>
+    </div>
+    <div class="split-grid" style="--panes: {{ panes | length }}">
+      {% for pane in panes %}
+      <div class="split-pane" data-pane="{{ pane }}">
+        <div class="split-pane-head">
+          <input type="text" value="{{ pane }}" aria-label="Ruta del panel"
+                 placeholder="wiki/pagina">
+          <button type="button" class="btn-ghost" title="Abrir la ruta en este panel">Ir</button>
+          <button type="button" class="btn-ghost" title="Cerrar este panel"
+                  {% if panes | length == 1 %}disabled{% endif %}>x</button>
+        </div>
+        <iframe src="/{{ pane }}?panel=1" title="Panel {{ loop.index }}"></iframe>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <script>
+    function splitUrls() {
+      return Array.from(document.querySelectorAll(".split-pane"))
+        .map(el => el.dataset.pane);
+    }
+    function gotoPanes(panes) {
+      if (!panes.length) panes = ["wiki"];
+      var params = panes.map(p => "p=" + encodeURIComponent(p)).join("&");
+      window.location = "/dividir?" + params;
+    }
+    document.addEventListener("click", function (e) {
+      var head = e.target.closest(".split-pane-head");
+      if (!head) return;
+      var pane = head.closest(".split-pane");
+      if (e.target.textContent === "Ir") {
+        var value = head.querySelector("input").value.trim().replace(/^\/+/, "");
+        if (!value) return;
+        pane.dataset.pane = value;
+        pane.querySelector("iframe").src = "/" + value + "?panel=1";
+      } else if (e.target.textContent === "x") {
+        var panes = splitUrls().filter(p => p !== pane.dataset.pane);
+        gotoPanes(panes);
+      }
+    });
+    var add = document.getElementById("split-add");
+    if (add) {
+      add.addEventListener("click", function () {
+        var panes = splitUrls();
+        panes.push("wiki");
+        gotoPanes(panes);
+      });
+    }
+  </script>
+</body>
+</html>

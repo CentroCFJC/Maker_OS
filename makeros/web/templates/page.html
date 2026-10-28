@@ -34,31 +34,55 @@
   {% endif %}
   <header class="page-header">
     <p class="breadcrumb"><a href="/{{ collection_slug }}">{{ collection_label }}</a> / {{ title }}</p>
-    <h1 class="page-title-with-icon">{{ icon(meta.get("icon"), cls="icon icon-title") }}<span>{{ title }}</span></h1>
-    {% if can_edit %}
-    <details class="icon-picker">
-      <summary>{{ icon(meta.get("icon")) }}<span>Icono de la página</span></summary>
-      <form method="post" action="{{ page_url }}/icono" class="icon-grid-form">
-        <input class="icon-search" type="search" placeholder="Filtrar iconos…"
-               oninput="makerosFilterIcons(this.value)">
-        <div class="icon-grid">
-          <button type="submit" name="icon" value="" title="Quitar icono"
-                  class="icon-option none{% if not meta.get("icon") %} active{% endif %}">Ninguno</button>
-          {% for name in icon_list %}
-          <button type="submit" name="icon" value="{{ name }}" title="{{ name }}"
-                  aria-label="{{ name }}"
-                  class="icon-option{% if meta.get("icon") == name %} active{% endif %}">
-            {{ icon(name, cls="icon icon-lg") }}
-          </button>
-          {% endfor %}
-        </div>
+    <div class="page-header-row">
+    <h1 class="page-title-with-icon">
+      {% if can_edit %}
+      <details class="icon-picker title-icon-picker">
+        <summary title="Cambiar el icono de la página">
+          {{ icon(meta.get("icon"), cls="icon icon-title") }}
+        </summary>
+        <form method="post" action="{{ page_url }}/icono" class="icon-grid-form">
+          <input class="icon-search" type="search" placeholder="Filtrar iconos…"
+                 oninput="makerosFilterIcons(this.value)">
+          <div class="icon-grid">
+            <button type="submit" name="icon" value="" title="Quitar icono"
+                    class="icon-option none{% if not meta.get("icon") %} active{% endif %}">Ninguno</button>
+            {% for name in icon_list %}
+            <button type="submit" name="icon" value="{{ name }}" title="{{ name }}"
+                    aria-label="{{ name }}"
+                    class="icon-option{% if meta.get("icon") == name %} active{% endif %}">
+              {{ icon(name, cls="icon icon-lg") }}
+            </button>
+            {% endfor %}
+          </div>
+        </form>
+      </details>
+      {% else %}
+      {{ icon(meta.get("icon"), cls="icon icon-title") }}
+      {% endif %}
+      <span>{{ title }}</span>
+    </h1>
+    <div class="header-actions page-header-actions">
+      {% if user and user["role"] != "viewer" %}
+      <form method="post" action="{{ page_url }}/fijar">
+        <button type="submit" class="btn-ghost" title="Mostrar u ocultar en la portada">
+          {{ icon("bookmark") }}{% if meta.get("pinned") %}Quitar de portada{% else %}Fijar en portada{% endif %}
+        </button>
       </form>
-    </details>
-    {% endif %}
-    {% if meta.get("tags") %}
-    <p class="tags">
-      {% for tag in meta.get("tags", []) %}<span class="tag">{{ tag }}</span>{% endfor %}
-    </p>
+      {% endif %}
+      <a class="btn-ghost" href="/dividir?p={{ page_url[1:] }}"
+         title="Abrir esta página en paneles divididos">{{ icon("columns") }} Dividir</a>
+    </div>
+    </div>
+    {% if meta.get("tags") or meta.get("pinned") %}
+    <div class="page-tags">
+      {% for tag in meta.get("tags", []) %}
+      <span class="page-tag">{{ tag }}</span>
+      {% endfor %}
+      {% if meta.get("pinned") %}
+      <span class="page-tag page-tag-pin">{{ icon("bookmark") }} en portada</span>
+      {% endif %}
+    </div>
     {% endif %}
   </header>
 
@@ -71,6 +95,14 @@
     {% include "_add_menu.html" %}
   </div>
   <footer class="page-actions">
+    {% if collection_slug == "wiki" and user and user["role"] != "viewer" %}
+    <form class="vault-move-form" method="post" action="{{ page_url }}/mover">
+      <label>Mover a otra ruta del vault
+        <input name="nueva_ruta" value="{{ page_path }}" required>
+      </label>
+      <button type="submit" class="btn-ghost">Mover página</button>
+    </form>
+    {% endif %}
     <form method="post" action="{{ page_url }}/borrar"
           onsubmit="return confirm('¿Eliminar esta página completa?');">
       <button type="submit" class="btn-danger-ghost">Eliminar página</button>

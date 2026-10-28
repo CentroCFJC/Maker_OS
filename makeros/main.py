@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,7 +16,20 @@ from .auth import count_users
 from .config import Settings
 from .db import connect, init_schema
 from .indexer import Watcher, reindex_all
-from .web.routes import auth_routes, collection_routes, home_routes, search_routes
+from .web.gcal import sync as gcal_sync
+from .web.routes import (
+    admin_routes,
+    assistant_routes,
+    auth_routes,
+    collection_routes,
+    explorer_routes,
+    gcal_routes,
+    home_routes,
+    notes_routes,
+    profile_routes,
+    search_routes,
+    split_routes,
+)
 
 log = logging.getLogger("makeros")
 
@@ -35,18 +49,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "`python -m makeros.cli adduser <username> --role admin`"
             )
         total = reindex_all(conn, settings.content_dir)
+        # Calendar events live in SQLite (Google format), not Markdown:
+        # one-time move of legacy event pages, then the files are gone.
+        from .web import event_store
+
+        event_store.ensure_schema(conn)
+        migrated = event_store.migrate_from_documents(conn, settings.content_dir)
+        if migrated:
+            log.info("Migrated %d calendar pages to event rows", migrated)
         conn.close()
         log.info("Indexed %d documents from %s", total, settings.content_dir)
 
         watcher = Watcher(settings.content_dir, settings.db_path)
         watcher.start()
+
+        async def gcal_loop():
+            """Two-way Google Calendar sync every 5 minutes (best effort).
+
+            The loop never dies: one bad cycle (network, revoked token)
+            logs and waits for the next one.
+            """
+            while True:
+                await asyncio.sleep(300)
+                try:
+                    conn = connect(settings.db_path)
+                    try:
+                        result = gcal_sync(conn, settings)
+                        if result.error:
+                            log.warning("gcal sync: %s", result.error)
+                        elif result.pulled or result.pushed or result.deleted:
+                            log.info(
+                                "gcal sync: %d pulled, %d pushed, %d deleted",
+                                result.pulled, result.pushed, result.deleted,
+                            )
+                    finally:
+                        conn.close()
+                except Exception:  # noqa: BLE001 — keep the loop alive
+                    log.exception("gcal sync loop crashed; retrying next cycle")
+
+        sync_task = asyncio.create_task(gcal_loop())
         try:
             yield
         finally:
+            sync_task.cancel()
             watcher.stop()
 
     app = FastAPI(title="MakerOS", version="0.1.0", lifespan=lifespan)
-    app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, same_site="lax")
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.secret_key,
+        same_site="lax",
+        https_only=settings.cookie_secure,
+    )
     app.state.settings = settings
 
     # Mount /static before including routers: the generic collection route
@@ -57,6 +111,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         home_routes.router,
         auth_routes.router,
         search_routes.router,
+        admin_routes.router,
+        profile_routes.router,
+        gcal_routes.router,
+        notes_routes.router,
+        explorer_routes.router,
+        assistant_routes.router,
+        split_routes.router,
         collection_routes.router,
     ):
         app.include_router(router)

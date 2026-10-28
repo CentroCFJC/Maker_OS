@@ -37,6 +37,28 @@ CREATE TABLE IF NOT EXISTS ui_settings (
     value TEXT NOT NULL
 );
 
+-- Calendar events live here (NOT Markdown): Google Calendar API
+-- format, synced both ways with the connected Google calendar.
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id          TEXT PRIMARY KEY,      -- Google id, or "local-<uuid>" until pushed
+    summary     TEXT NOT NULL DEFAULT '',
+    location    TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    start_json  TEXT NOT NULL DEFAULT '{}',  -- {"date": "..."} | {"dateTime": "..."}
+    end_json    TEXT NOT NULL DEFAULT '{}',
+    category    TEXT NOT NULL DEFAULT '',    -- event_categories.id
+    status      TEXT NOT NULL DEFAULT 'confirmed',
+    updated     TEXT NOT NULL DEFAULT '',
+    html_link   TEXT NOT NULL DEFAULT ''
+);
+
+-- User-manageable event categories with a display color (logo palette).
+CREATE TABLE IF NOT EXISTS event_categories (
+    id     TEXT PRIMARY KEY,   -- slug, e.g. 'taller' (stable across Google sync)
+    label  TEXT NOT NULL,
+    color  TEXT NOT NULL DEFAULT '#6d6c68'
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
     title, body,
     content = 'documents',
@@ -85,4 +107,14 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
 def init_schema(conn: sqlite3.Connection) -> None:
     """Create tables, FTS index and triggers if missing."""
     conn.executescript(SCHEMA)
+    # Lightweight migrations for databases created before the column
+    # existed (ALTER TABLE has no IF NOT EXISTS for columns).
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+    if "avatar" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''")
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(calendar_events)")}
+    if "category" not in columns:
+        conn.execute("ALTER TABLE calendar_events ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+    if "people" not in columns:
+        conn.execute("ALTER TABLE calendar_events ADD COLUMN people TEXT NOT NULL DEFAULT ''")
     conn.commit()

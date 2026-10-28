@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Explorador{% endblock %}
+{% macro render_node(node) %}
+<details class="vault-folder" open>
+  <summary>
+    <span class="vault-folder-row{% if node["url"] and carpeta == node["url"][1:] %} explorer-current{% endif %}">
+      {% if node.get("slug") %}{{ icon(nav_icons.get(node["slug"])) }}{% else %}{{ icon("folder") }}{% endif %}
+      <a href="/explorador?carpeta={{ node["url"][1:] }}">{{ node["name"] }}</a>
+    </span>
+  </summary>
+  <div class="vault-children">
+    {% for f in node["files"] %}
+    <a class="vault-file{% if f["url"] and carpeta and carpeta == f["url"][1:] %} explorer-current{% endif %}"
+       href="{{ f["url"] }}">{{ icon("file-text") }}{{ f["title"] }}</a>
+    {% endfor %}
+    {% for sub in node["folders"] %}
+    {{ render_node(sub) }}
+    {% endfor %}
+  </div>
+</details>
+{% endmacro %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / Explorador</p>
+  <div class="page-header-row">
+    <h1 class="page-title-with-icon">
+      {{ icon("folder") }}
+      <span>Explorador</span>
+    </h1>
+    <div class="header-actions">
+      <a class="btn-ghost" href="/dividir?p=wiki/explorador&p=wiki"
+         title="Explorar y leer lado a lado">{{ icon("columns") }} Dividir</a>
+    </div>
+  </div>
+</header>
+
+<div class="explorer-toolbar">
+  <nav class="explorer-address" aria-label="Ruta">
+    <a href="/explorador{% if vista != 'tarjetas' %}?vista={{ vista }}{% endif %}">{{ icon("home") }} Inicio</a>
+    {% for segment in segments %}
+    <span class="explorer-sep">/</span>
+    <a href="/explorador?carpeta={{ segment["carpeta"] }}{% if vista != 'tarjetas' %}&vista={{ vista }}{% endif %}">{{ segment["name"] }}</a>
+    {% endfor %}
+  </nav>
+  <nav class="view-toggle" aria-label="Vista">
+    <a class="view-option{% if vista == 'tarjetas' %} active{% endif %}"
+       href="/explorador?carpeta={{ carpeta }}&vista=tarjetas">Tarjetas</a>
+    <a class="view-option{% if vista == 'lista' %} active{% endif %}"
+       href="/explorador?carpeta={{ carpeta }}&vista=lista">Lista</a>
+    <a class="view-option{% if vista == 'arbol' %} active{% endif %}"
+       href="/explorador?vista=arbol">Árbol</a>
+  </nav>
+</div>
+
+{% if vista == "arbol" %}
+<div class="vault explorer-tree">
+  {% for node in tree %}
+  {{ render_node(node) }}
+  {% else %}
+  <p class="item-empty">Nada indexado todavía.</p>
+  {% endfor %}
+</div>
+{% else %}
+<div class="explorer-layout">
+  <aside class="explorer-tree-pane">
+    {% for node in tree %}
+    {{ render_node(node) }}
+    {% endfor %}
+  </aside>
+  <div class="explorer-content">
+    {% if folders %}
+    {% if vista == "tarjetas" %}
+    <div class="card-grid explorer-cards">
+      {% for node in folders %}
+      <a class="item-card note-folder explorer-folder-card"
+         href="/explorador?carpeta={{ node["url"][1:] }}&vista={{ vista }}">
+        <div class="card-head"><span class="card-icon">{{ icon("folder", cls="icon icon-lg") }}</span></div>
+        <span class="card-title">{{ node["name"] }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <ul class="item-list">
+      {% for node in folders %}
+      <li class="item-row">
+        <span class="row-icon">{{ icon("folder") }}</span>
+        <a class="item-title" href="/explorador?carpeta={{ node["url"][1:] }}&vista={{ vista }}">{{ node["name"] }}</a>
+        <span class="item-meta">carpeta</span>
+      </li>
+      {% endfor %}
+      {% for f in files %}
+      <li class="item-row">
+        <span class="row-icon">{{ icon("file-text") }}</span>
+        <a class="item-title" href="{{ f["url"] }}">{{ f["title"] }}</a>
+        <span class="item-meta">{{ f["url"][1:] }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endif %}
+    {% if files %}
+    {% if vista == "tarjetas" %}
+    <div class="card-grid explorer-cards">
+      {% for f in files %}
+      <a class="item-card" href="{{ f["url"] }}">
+        <div class="card-head"><span class="card-icon">{{ icon("file-text", cls="icon icon-lg") }}</span></div>
+        <span class="card-title">{{ f["title"] }}</span>
+        <span class="card-meta">{{ f["url"][1:] }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% elif not folders %}
+    <p class="item-empty">Carpeta vacía.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

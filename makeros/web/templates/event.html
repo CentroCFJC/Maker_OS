@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — {{ event["summary"] }}{% endblock %}
+{% block content %}
+<article class="notion-page event-page">
+  <header class="page-header">
+    <p class="breadcrumb"><a href="/calendario">Calendario</a> / Evento</p>
+    <div class="page-header-row">
+      <h1 class="page-title-with-icon">
+        {{ icon("calendar", cls="icon icon-title") }}
+        <span>{{ event["summary"] or "Evento" }}</span>
+      </h1>
+      <div class="header-actions">
+        {% if event["html_link"] and user["role"] in ("admin", "member") %}
+        <a class="btn-ghost" href="{{ event["html_link"] }}" target="_blank" rel="noopener">
+          Abrir en Google</a>
+        {% endif %}
+        {% if user and user["role"] != "viewer" %}
+        <form method="post" action="/calendario/evento/{{ event["id"] }}/eliminar">
+          <button class="btn-danger-ghost" type="submit">Eliminar evento</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <div class="blocks">
+    <dl class="event-facts">
+      <div class="event-fact">
+        <dt>Categoría</dt>
+        <dd>
+          {% if event["category"] and cat_labels.get(event["category"]) %}
+          <span class="cat-badge"
+                style="background: color-mix(in srgb, {{ cat_colors[event['category']] }} 18%, var(--card)); color: color-mix(in srgb, {{ cat_colors[event['category']] }} 85%, var(--text-title));">
+            {{ cat_labels[event["category"]] }}</span>
+          {% else %}Otro{% endif %}
+        </dd>
+      </div>
+      <div class="event-fact">
+        <dt>Cuándo</dt>
+        <dd>{{ event_when }}</dd>
+      </div>
+      {% if event["location"] %}
+      <div class="event-fact">
+        <dt>Lugar</dt>
+        <dd>{{ event["location"] }}</dd>
+      </div>
+      {% endif %}
+      {% if event["people"] %}
+      <div class="event-fact">
+        <dt>Personas</dt>
+        <dd class="chip-row">
+          {% for slug in event["people"].split(",") if slug.strip() %}
+          <a class="filter-chip" href="/people/{{ slug }}">{{ slug.replace("-", " ") }}</a>
+          {% endfor %}
+        </dd>
+      </div>
+      {% endif %}
+      {% if event["description"] %}
+      <div class="event-fact">
+        <dt>Descripción</dt>
+        <dd>{{ event["description"] }}</dd>
+      </div>
+      {% endif %}
+      <div class="event-fact">
+        <dt>Estado</dt>
+        <dd>{{ event["status"] }}</dd>
+      </div>
+    </dl>
+    <p class="event-note">
+      Los eventos se editan desde Google Calendar; los cambios llegan aquí
+      automáticamente en la próxima sincronización.
+    </p>
+  </div>
+</article>
+{% endblock %}

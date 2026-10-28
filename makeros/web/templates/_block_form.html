@@ -14,11 +14,26 @@
         {% endfor %}
       </div>
     </div>
+    {% if tipo == "imagen" %}
+    <div class="block-image-tools">
+      <label class="btn-ghost btn-upload">
+        Subir imagen
+        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden
+               onchange="makerosUploadBlockImage(this)">
+      </label>
+      <input type="url" class="block-image-url" placeholder="…o pega una URL de imagen"
+             aria-label="URL de la imagen">
+      <button type="button" class="btn-ghost" onclick="makerosInsertImageUrl(this)">
+        Usar URL</button>
+      <span class="block-upload-status" data-upload-status></span>
+    </div>
+    {% endif %}
     <div class="block-form-actions">
-      <button type="submit" class="btn-primary">Guardar</button>
+      <span class="block-form-hint">Enter guarda · Mayús+Enter salto de línea · / inserta bloques · Esc cierra</span>
+      <button type="submit" class="btn-ghost">Guardar</button>
       <button type="button" class="btn-ghost"
               hx-get="{{ page_url }}/bloques/{{ i }}"
-              hx-target="#block-{{ i }}" hx-swap="outerHTML">Cancelar</button>
+              hx-target="#block-{{ i }}" hx-swap="outerHTML">Cerrar</button>
     </div>
   </form>
 </div>

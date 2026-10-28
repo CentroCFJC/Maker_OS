@@ -44,3 +44,17 @@ def collection_icons(conn: sqlite3.Connection) -> dict[str, str]:
         if slug in icons and is_valid_icon(row["value"]):
             icons[slug] = row["value"]
     return icons
+
+# Admin-selectable themes: accent (logo palette) + background style.
+THEME_ACCENTS = ("rojo", "indigo", "naranja")
+THEME_BGS = ("blanco", "suave", "cuadricula")
+
+
+def theme_accent(conn: sqlite3.Connection) -> str:
+    value = get_ui(conn, "theme:accent")
+    return value if value in THEME_ACCENTS else "rojo"
+
+
+def theme_bg(conn: sqlite3.Connection) -> str:
+    value = get_ui(conn, "theme:background")
+    return value if value in THEME_BGS else "blanco"

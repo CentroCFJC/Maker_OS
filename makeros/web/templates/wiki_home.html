@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Wiki{% endblock %}
+{% set can_edit = user and user["role"] != "viewer" %}
+{% macro render_folder(folder, folder_path) %}
+<details class="vault-folder" open>
+  <summary class="vault-drop" data-folder-path="{{ folder.path }}"
+           {% if can_edit %}draggable="true" data-move-type="folder" data-move-path="{{ folder.path }}"{% endif %}>
+    <span class="vault-folder-row">
+      {{ icon("folder") }}
+      <a href="/wiki/{{ folder.path }}">{{ folder.name }}</a>
+    </span>
+  </summary>
+  <div class="vault-children">
+    {% for f in folder.files %}
+    <a class="vault-file vault-drop-item" href="/{{ f.path }}"
+       {% if can_edit %}draggable="true" data-move-type="page" data-move-path="{{ f.path[5:] }}"{% endif %}>
+      {{ icon("file-text") }}{{ f.title }}
+    </a>
+    {% endfor %}
+    {% for sub in folder.folders %}
+    {{ render_folder(sub, folder_path) }}
+    {% endfor %}
+  </div>
+</details>
+{% endmacro %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / Wiki{% if folder_path %} / {{ folder_path }}{% endif %}</p>
+  <div class="page-header-row">
+    <h1 class="page-title-with-icon">{% include "_section_icon_picker.html" %}
+      <span>{% if folder_path %}{{ folder_path.rsplit("/", 1)[-1] }}{% else %}Documentación{% endif %}</span>
+    </h1>
+    <div class="header-actions">
+      <a class="btn-ghost" href="/dividir?p=wiki{% if folder_path %}/{{ folder_path }}{% endif %}"
+         title="Abrir la wiki en paneles divididos">{{ icon("columns") }} Dividir</a>
+      <a class="btn-ghost" href="/asistente" title="Preguntar a la documentación">{{ icon("cpu") }} Asistente</a>
+      <a class="btn-ghost" href="/wiki/grafos" title="Ver el grafo de conexiones">{{ icon("share-2") }} Grafo</a>
+      {% if can_edit %}
+      <details class="icon-picker">
+        <summary>{{ icon("folder-plus") }}<span>Nueva carpeta</span></summary>
+        <form method="post" action="/wiki/carpeta" class="icon-grid-form vault-newfolder-form">
+          <label>Ruta de la carpeta (puede anidarse: guias/impresion)
+            <input name="ruta" placeholder="carpeta/subcarpeta" required>
+          </label>
+          <button class="btn-primary" type="submit">Crear carpeta</button>
+        </form>
+      </details>
+      <a class="btn-primary" href="/wiki/nuevo{% if folder_path %}?ruta={{ folder_path }}{% endif %}">
+        + Nueva página</a>
+      {% endif %}
+    </div>
+  </div>
+  {% if folder_path %}
+  <p class="vault-breadcrumb">
+    <a href="/wiki">wiki</a>
+    {% set parts = folder_path.split("/") %}
+    {% set ns = namespace(acc = "") %}
+    {% for part in parts %}
+    {% set ns.acc = (ns.acc ~ "/" ~ part) if ns.acc else part %}
+    / <a href="/wiki/{{ ns.acc }}">{{ part }}</a>
+    {% endfor %}
+  </p>
+  {% endif %}
+</header>
+
+<div class="vault">
+  {% if tree.folders or tree.files %}
+  <div class="vault-tree vault-drop" data-folder-path="{{ folder_path }}">
+    {% for f in tree.files %}
+    <a class="vault-file vault-drop-item" href="/{{ f.path }}"
+       {% if can_edit %}draggable="true" data-move-type="page" data-move-path="{{ f.path[5:] }}"{% endif %}>
+      {{ icon("file-text") }}{{ f.title }}
+    </a>
+    {% endfor %}
+    {% for sub in tree.folders %}
+    {{ render_folder(sub, folder_path) }}
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="item-empty">Carpeta vacía. Crea una página o una subcarpeta.</p>
+  {% endif %}
+</div>
+
+{% if can_edit %}
+<script>
+(function () {
+  const tree = document.querySelector(".vault-tree");
+  if (!tree) return;
+  let drag = null;
+
+  function clearHighlights() {
+    tree.querySelectorAll(".drop-hover").forEach(el => el.classList.remove("drop-hover"));
+  }
+
+  tree.querySelectorAll("[draggable]").forEach(el => {
+    el.addEventListener("dragstart", e => {
+      drag = { type: el.dataset.moveType, path: el.dataset.movePath };
+      e.dataTransfer.setData("text/plain", el.dataset.movePath);
+      e.dataTransfer.effectAllowed = "move";
+      el.classList.add("dragging");
+    });
+    el.addEventListener("dragend", () => {
+      el.classList.remove("dragging");
+      drag = null;
+      clearHighlights();
+    });
+  });
+
+  tree.querySelectorAll(".vault-drop").forEach(zone => {
+    zone.addEventListener("dragover", e => {
+      if (!drag) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      zone.classList.add("drop-hover");
+    });
+    zone.addEventListener("dragleave", () => zone.classList.remove("drop-hover"));
+    zone.addEventListener("drop", async e => {
+      e.preventDefault();
+      zone.classList.remove("drop-hover");
+      if (!drag) return;
+      const target = zone.dataset.folderPath || "";
+      const name = drag.path.split("/").pop();
+      let url, body;
+      if (drag.type === "page") {
+        url = "/wiki/" + drag.path + "/mover";
+        body = new URLSearchParams({ nueva_ruta: target ? target + "/" + name : name });
+      } else {
+        url = "/wiki/carpeta/" + drag.path + "/mover";
+        body = new URLSearchParams({ destino: target });
+      }
+      try {
+        const res = await fetch(url, { method: "POST", body });
+        if (res.redirected || res.ok) { window.location.reload(); }
+        else { alert("No se pudo mover. Revisa que la ruta destino sea válida."); }
+      } catch {
+        alert("No se pudo mover la página.");
+      }
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

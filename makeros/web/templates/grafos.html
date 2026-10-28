@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Grafo de la wiki{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / <a href="/wiki">Wiki</a> / Grafo</p>
+  <div class="page-header-row">
+    <h1 class="page-title-with-icon">
+      {{ icon("share-2", cls="icon icon-title") }}
+      <span>Grafo de la documentación</span>
+    </h1>
+    <div class="header-actions">
+      <a class="btn-ghost" href="/wiki">Volver a la wiki</a>
+    </div>
+  </div>
+  <p class="page-subtitle">Cada nodo es una página de cualquier sección;
+    las líneas son enlaces <code>[[…]]</code> y relaciones con proyectos.
+    Colores por sección. Arrastra para acomodar, haz clic para abrir.</p>
+</header>
+
+<div class="graph-wrap">
+  <canvas id="graph-canvas" class="graph-canvas"></canvas>
+</div>
+
+<script>
+  window.MAKEROS_GRAPH = {{ graph | tojson }};
+</script>
+<script>
+  (function () {
+    var canvas = document.getElementById("graph-canvas");
+    if (!canvas || !window.MAKEROS_GRAPH) return;
+    var ctx = canvas.getContext("2d");
+    var nodes = window.MAKEROS_GRAPH.nodes;
+    var edges = window.MAKEROS_GRAPH.edges;
+    var byId = {};
+    nodes.forEach(function (n, i) {
+      var angle = (2 * Math.PI * i) / nodes.length;
+      n.x = canvas.width / 2 + Math.cos(angle) * 180;
+      n.y = canvas.height / 2 + Math.sin(angle) * 120;
+      n.vx = 0; n.vy = 0;
+      byId[n.id] = n;
+    });
+    edges.forEach(function (e) { e.a = byId[e.source]; e.b = byId[e.target]; });
+
+    function resize() {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight || 480;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    var dragging = null;
+    var hovered = null;
+    canvas.addEventListener("mousedown", function (event) {
+      var n = nearest(event);
+      if (n) { dragging = n; }
+    });
+    canvas.addEventListener("mousemove", function (event) {
+      var rect = canvas.getBoundingClientRect();
+      var pos = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      if (dragging) {
+        dragging.x = pos.x; dragging.y = pos.y;
+        dragging.vx = 0; dragging.vy = 0;
+      } else {
+        hovered = nearest(event);
+        canvas.style.cursor = hovered ? "pointer" : "default";
+      }
+    });
+    canvas.addEventListener("mouseup", function (event) {
+      var n = nearest(event);
+      dragging = null;
+      if (n) window.location.href = "/" + n.id;
+    });
+
+    function nearest(event) {
+      var rect = canvas.getBoundingClientRect();
+      var x = event.clientX - rect.left, y = event.clientY - rect.top;
+      var best = null, bestD = 20 * 20;
+      nodes.forEach(function (n) {
+        var d = (n.x - x) * (n.x - x) + (n.y - y) * (n.y - y);
+        if (d < bestD) { bestD = d; best = n; }
+      });
+      return best;
+    }
+
+    function step() {
+      // Repulsion between all nodes (lab scale: fine).
+      for (var i = 0; i < nodes.length; i++) {
+        for (var j = i + 1; j < nodes.length; j++) {
+          var a = nodes[i], b = nodes[j];
+          var dx = b.x - a.x, dy = b.y - a.y;
+          var d2 = dx * dx + dy * dy || 1;
+          var f = 2200 / d2;
+          var d = Math.sqrt(d2);
+          a.vx -= (dx / d) * f; a.vy -= (dy / d) * f;
+          b.vx += (dx / d) * f; b.vy += (dy / d) * f;
+        }
+      }
+      // Springs along edges + pull to center.
+      nodes.forEach(function (n) {
+        n.vx += (canvas.width / 2 - n.x) * 0.002;
+        n.vy += (canvas.height / 2 - n.y) * 0.002;
+      });
+      edges.forEach(function (e) {
+        var dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
+        var d = Math.sqrt(dx * dx + dy * dy) || 1;
+        var f = (d - 120) * 0.01;
+        e.a.vx += (dx / d) * f; e.a.vy += (dy / d) * f;
+        e.b.vx -= (dx / d) * f; e.b.vy -= (dy / d) * f;
+      });
+      nodes.forEach(function (n) {
+        if (n === dragging) return;
+        n.vx *= 0.85; n.vy *= 0.85;
+        n.x += Math.max(-5, Math.min(5, n.vx));
+        n.y += Math.max(-5, Math.min(5, n.vy));
+      });
+    }
+
+    function draw() {
+      step();
+      var colors = (window.makerosBrainColors ? makerosBrainColors() : {});
+      var ink = colors.text || "#111";
+      var muted = colors.muted || "#6d6c68";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = colors.line || "#ccc";
+      edges.forEach(function (e) {
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.moveTo(e.a.x, e.a.y);
+        ctx.lineTo(e.b.x, e.b.y);
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+      nodes.forEach(function (n) {
+        var isHover = n === hovered || (hovered && edges.some(function (e) {
+          return (e.a === hovered && e.b === n) || (e.b === hovered && e.a === n);
+        }));
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, isHover ? 8 : 5, 0, 2 * Math.PI);
+        ctx.fillStyle = isHover
+          ? getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#e42c45"
+          : colors[n.collection] || "#29265b";
+        ctx.fill();
+        ctx.font = "12px sans-serif";
+        ctx.fillStyle = isHover ? ink : muted;
+        var label = n.title.length > 22 ? n.title.slice(0, 21) + "…" : n.title;
+        ctx.fillText(label, n.x + 9, n.y + 4);
+      });
+      requestAnimationFrame(draw);
+    }
+    draw();
+  })();
+</script>
+{% endblock %}

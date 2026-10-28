@@ -1,4 +1,5 @@
 ---
+banner: /media/exhibicion-cauce-project-cf9c9239.png
 lead: jacob
 members:
 - jacob
@@ -24,10 +25,4 @@ miembro del equipo.
 - Registro de dispositivos: colección **Exhibiciones**.
 - Credenciales: bóveda (fase 4), nunca en Markdown.
 
-## Changelog
-
-- **2026-10-05** — Proyecto creado en MakerOS.
-
-| Columna 1 | Columna 2 |
-|---|---|
-|  |  |
+![pxl-20261007-210257719-2|25](/media/projects/exhibicion-cauce/project/pxl-20261007-210257719-2.jpg)

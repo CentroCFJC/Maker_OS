@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}MakerOS — Mi perfil{% endblock %}
+{% block content %}
+<header class="page-header">
+  <p class="breadcrumb"><a href="/">Inicio</a> / Mi perfil</p>
+  <div class="page-header-row">
+    <h1>Mi perfil</h1>
+  </div>
+</header>
+
+{% if message %}<p class="profile-message">{{ message }}</p>{% endif %}
+
+<section class="home-section">
+  <h2>Foto de perfil</h2>
+  <div class="profile-avatar-row">
+    {% if user["avatar"] %}
+    <img class="profile-avatar" src="/media/{{ user["avatar"] }}" alt="Tu foto de perfil">
+    {% else %}
+    <span class="profile-avatar profile-avatar-empty">
+      {{ (user["display_name"] or user["username"])[:1] | upper }}</span>
+    {% endif %}
+    <form class="admin-form" method="post" action="/perfil/avatar" enctype="multipart/form-data">
+      <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif"
+             required aria-label="Nueva foto de perfil">
+      <button class="btn-primary" type="submit">Subir</button>
+    </form>
+    {% if user["avatar"] %}
+    <form method="post" action="/perfil/avatar/quitar">
+      <button class="btn-ghost" type="submit">Quitar</button>
+    </form>
+    {% endif %}
+  </div>
+  <p class="admin-muted">PNG, JPEG, WebP o GIF; máximo 5 MB. Solo la ven personas con cuenta.</p>
+</section>
+
+<section class="home-section">
+  <h2>Datos</h2>
+  <form class="admin-form" method="post" action="/perfil/datos">
+    <label for="display-name">Nombre visible</label>
+    <input id="display-name" name="display_name" value="{{ user["display_name"] }}"
+           aria-label="Nombre visible">
+    <button class="btn-primary" type="submit">Guardar</button>
+  </form>
+</section>
+
+<section class="home-section">
+  <h2>Contraseña</h2>
+  <form class="profile-form" method="post" action="/perfil/clave">
+    <label>Contraseña actual
+      <input type="password" name="current" required autocomplete="current-password">
+    </label>
+    <label>Contraseña nueva (mínimo 8)
+      <input type="password" name="password" required minlength="8"
+             autocomplete="new-password">
+    </label>
+    <button class="btn-primary" type="submit">Cambiar</button>
+  </form>
+</section>
+{% endblock %}

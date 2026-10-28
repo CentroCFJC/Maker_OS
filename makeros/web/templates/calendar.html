@@ -4,61 +4,75 @@
 <header class="page-header">
   <p class="breadcrumb"><a href="/">Inicio</a> / {{ collection_label }}</p>
   <div class="page-header-row">
-    <h1>{{ month_title }}</h1>
+    <h1 class="page-title-with-icon">{% include "_section_icon_picker.html" %}<span>{{ month_title }}</span></h1>
     <div class="header-actions">
       <nav class="view-toggle" aria-label="Mes">
         <a class="view-option" href="/calendario?m={{ prev_month }}">‹ Anterior</a>
         <a class="view-option" href="/calendario">Hoy</a>
         <a class="view-option" href="/calendario?m={{ next_month }}">Siguiente ›</a>
       </nav>
-      {% include "_section_icon_picker.html" %}
       {% if user and user["role"] == "admin" %}
       <a class="btn-ghost" href="/calendario/plantilla"
          title="Editar la plantilla de eventos nuevos">Plantilla</a>
       {% endif %}
       {% if user and user["role"] != "viewer" %}
-      <a class="btn-primary" href="/calendario/nuevo">+ Añadir evento</a>
+      <button type="button" class="btn-primary"
+              onclick="makerosOpenModal('/calendario/nuevo?fragmento=1')">+ Añadir evento</button>
       {% endif %}
     </div>
   </div>
 </header>
 
-<div class="cal-weekdays">
-  {% for wd in weekdays %}<span>{{ wd }}</span>{% endfor %}
-</div>
-<div class="cal-grid">
-  {% for week in weeks %}
-  {% for day in week %}
-  <div class="cal-day{% if not day["in_month"] %} out-month{% endif %}{% if day["is_today"] %} today{% endif %}">
-    <div class="cal-day-head">
-      <span class="cal-daynum">{{ day["date"].day }}</span>
-      {% if user and user["role"] != "viewer" %}
-      <a class="cal-add" href="/calendario/nuevo?fecha={{ day["iso"] }}"
-         title="Añadir evento el {{ day["iso"] }}"
-         aria-label="Añadir evento el {{ day["iso"] }}">+</a>
-      {% endif %}
+<div class="cal-wrap">
+  <div class="cal-month">
+    <div class="cal-weekdays">
+      {% for wd in weekdays %}<span>{{ wd }}</span>{% endfor %}
     </div>
-    {% for item in day["items"] %}
-    <a class="cal-chip {{ item.kind }}" href="/{{ item.path }}"
-       title="{{ item.title }}{% if item.time %} ({{ item.time }}){% endif %}">
-      {% if item.time %}<span class="cal-chip-time">{{ item.time }}</span>{% endif %}
-      {{ item.title }}
-    </a>
-    {% endfor %}
+    <div class="cal-grid">
+      {% for week in weeks %}
+      {% for day in week %}
+      <div class="cal-day{% if day["weekend"] %} weekend{% endif %}{% if day["is_today"] %} today{% endif %}">
+        <div class="cal-day-head">
+          <span class="cal-daynum">{{ day["date"].day }}</span>
+          {% if user and user["role"] != "viewer" %}
+          <button type="button" class="cal-add"
+             onclick="makerosOpenModal('/calendario/nuevo?fecha={{ day["iso"] }}&fragmento=1')"
+             title="Añadir evento el {{ day["iso"] }}"
+             aria-label="Añadir evento el {{ day["iso"] }}">+</button>
+          {% endif %}
+        </div>
+        {% for item in day["items"] %}
+        {% set chip_color = cat_colors.get(item.cat, "") %}
+        <a class="cal-chip {{ item.kind }}" href="/{{ item.path }}"
+           title="{{ item.title }}{% if item.time %} ({{ item.time }}){% endif %}{% if item.cat and cat_labels.get(item.cat) %} · {{ cat_labels[item.cat] }}{% endif %}"
+           {% if chip_color %}style="background: color-mix(in srgb, {{ chip_color }} 18%, var(--card)); color: color-mix(in srgb, {{ chip_color }} 85%, var(--text-title));"{% endif %}>
+          {% if item.time %}<span class="cal-chip-time">{{ item.time }}</span>{% endif %}
+          {{ item.title }}
+        </a>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      {% endfor %}
+    </div>
   </div>
-  {% endfor %}
-  {% endfor %}
-</div>
 
-<details class="cal-connect">
-  <summary>Conectar con Google Calendar</summary>
-  <p>Cualquier aplicación de calendario puede seguir este canal:</p>
-  <ol>
-    <li>En Google Calendar, abre «Otros calendarios» y elige «Desde la URL».</li>
-    <li>Pega esta dirección y guarda:
-      <code class="cal-feed-url">{{ feed_url }}</code>
-    </li>
-  </ol>
-  <p>Google volverá a leer el canal cada vez que se reindexe un evento.</p>
-</details>
+  <aside class="cal-side" aria-label="Próximos eventos">
+    <section class="home-section">
+      <h2>Próximamente</h2>
+      <ul class="item-list">
+        {% for ev in upcoming %}
+        <li class="item-row">
+          <a class="item-title" href="/{{ ev.path }}">{{ ev.title }}</a>
+          <span class="item-meta">
+            {{ ev.date }}{% if ev.time %} · {{ ev.time }}{% endif %} ·
+            {{ cat_labels.get(ev.cat, "Evento") }}
+          </span>
+        </li>
+        {% else %}
+        <li class="item-empty">Nada próximo por ahora.</li>
+        {% endfor %}
+      </ul>
+    </section>
+  </aside>
+</div>
 {% endblock %}
