@@ -42,20 +42,24 @@ users — `--role member` or `--role viewer`.)
 
 ## 4. Serve through Tailscale
 
-The app must run with the Tailscale URL as its base URL so generated
-links (ICS feed, Google OAuth callback) are correct, and with secure
-cookies since HTTPS is on:
+The repo includes `scripts\serve.ps1`, the Windows equivalent of the
+Linux `make serve`: it detects your Tailscale URL, starts the app with
+the right environment (`MAKEROS_BASE_URL`, secure cookies), waits for
+it to come up, and publishes it with `tailscale serve --bg`.
 
 ```powershell
-$env:MAKEROS_BASE_URL = "https://<machine>.<tailnet>.ts.net"
-$env:MAKEROS_COOKIE_SECURE = "1"
-.venv\Scripts\uvicorn makeros.main:app --host 127.0.0.1 --port 8000
+.\scripts\serve.ps1                # start (binds 127.0.0.1:8000)
+.\scripts\serve.ps1 -Action stop   # stop
+.\scripts\serve.ps1 -Action status # what is running
+.\scripts\serve.ps1 -Bind 8001     # different local port
+.\scripts\serve.ps1 -Lan           # also reachable on the LAN IP (plain HTTP)
 ```
 
-In a **second** PowerShell window, publish it:
+PowerShell may block scripts: if you get an execution-policy error,
+run once as admin:
 
 ```powershell
-tailscale serve --bg 127.0.0.1:8000
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
 Done. Open `https://<machine>.<tailnet>.ts.net` from any device on
@@ -73,16 +77,18 @@ to the public internet — don't use it unless the lab decides so.
 
 ## 5. Update the app
 
-Stop the server (Ctrl+C in the first window), then:
+Stop the server (Ctrl+C won't work — it runs hidden; use the script),
+then:
 
 ```powershell
+.\scripts\serve.ps1 -Action stop
 git pull
 .venv\Scripts\pip install -e .
+.\scripts\serve.ps1
 ```
 
-Start it again (step 4). Content, database and uploaded images live in
-`content\`, `data\` and `private\` inside the folder — updates never
-touch them.
+Content, database and uploaded images live in `content\`, `data\` and
+`private\` inside the folder — updates never touch them.
 
 ## 6. Run it always (optional, recommended for the final server)
 
