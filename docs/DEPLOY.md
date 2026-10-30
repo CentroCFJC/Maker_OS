@@ -90,26 +90,69 @@ git pull
 Content, database and uploaded images live in `content\`, `data\` and
 `private\` inside the folder — updates never touch them.
 
-## 6. Run it always (optional, recommended for the final server)
+## 6. Run it always with Servy (recommended for the final server)
 
-Step 4's server dies when you close PowerShell or log out. To keep it
-running as a background service, use **NSSM** (the Non-Sucking Service
-Manager):
+`scripts\serve.ps1` dies when you log out. To keep MakerOS running as a
+real Windows service (starts on boot, restarts on crash), use
+**Servy** — https://servy-win.github.io/ (GitHub: `aelassas/servy`).
+It wraps any executable as a native Windows service and has both a GUI
+and a CLI.
 
-1. Download nssm from https://nssm.cc, put `nssm.exe` somewhere in PATH.
-2. In an **Administrator** PowerShell:
+### Install Servy
+
+Any of these, in an Administrator PowerShell:
 
 ```powershell
-nssm install MakerOS "C:\MakerOS\.venv\Scripts\uvicorn.exe" "makeros.main:app --host 127.0.0.1 --port 8000"
-nssm set MakerOS AppDirectory C:\MakerOS
-nssm set MakerOS AppEnvironmentExtra MAKEROS_BASE_URL=https://<machine>.<tailnet>.ts.net MAKEROS_COOKIE_SECURE=1
-nssm start MakerOS
+winget install Servy            # or: choco install servy  /  scoop install servy
 ```
 
-Now the app survives reboots and restarts on crashes. Updating becomes:
-`nssm restart MakerOS` after `git pull`.
+or download the installer from the
+[releases page](https://github.com/aelassas/servy/releases). After
+install, `servy-cli` is on the PATH.
 
-To remove it later: `nssm remove MakerOS confirm`.
+### Configure MakerOS as a service
+
+1. Edit `scripts\run-service.bat` and set your real Tailscale URL in
+   `MAKEROS_BASE_URL` (`tailscale status` shows it as `DNSName`).
+2. Keep the project in a path **without spaces** (e.g. `C:\MakerOS`).
+3. Install the service:
+
+```powershell
+servy-cli install --name="MakerOS" --displayName="MakerOS" `
+  --path="%SystemRoot%\System32\cmd.exe" `
+  --params="/c C:\MakerOS\scripts\run-service.bat" `
+  --startupDir="C:\MakerOS" `
+  --startupType=Automatic `
+  --recoveryAction=RestartService `
+  --stdout="C:\MakerOS\data\service-stdout.log" `
+  --stderr="C:\MakerOS\data\service-stderr.log"
+servy-cli start --name="MakerOS"
+```
+
+4. Publish it through Tailscale once (this mapping persists across
+   reboots, no service needed for it):
+
+```powershell
+tailscale serve --bg 127.0.0.1:8000
+```
+
+Now the app survives reboots and restarts on crashes. Manage it from
+the Servy GUI (`services.msc` also shows it) or the CLI:
+
+```powershell
+servy-cli status --name="MakerOS"
+servy-cli restart --name="MakerOS"
+servy-cli stop --name="MakerOS"
+servy-cli uninstall --name="MakerOS"
+```
+
+### Updating then becomes
+
+```powershell
+git pull
+.venv\Scripts\pip install -e .
+servy-cli restart --name="MakerOS"
+```
 
 ## 7. Google Calendar sync
 
@@ -133,10 +176,11 @@ IP redirect URIs.
   `MAKEROS_COOKIE_SECURE=1` while serving over `tailscale serve`
   (or set it while serving plain HTTP; Secure cookies only work on
   HTTPS).
-- **Port already in use** — something else is on 8000: change the
-  port in both windows (`--port 8001` and
-  `tailscale serve --bg 127.0.0.1:8001`).
-- **Check what's running** — `tailscale serve status` shows the
-  active proxy; the uvicorn window shows requests as they come.
+- **Port already in use** — something else is on 8000: change the port
+  in `scripts\serve.ps1 -Bind 8001` (or in `scripts\run-service.bat` for
+  the service) and in `tailscale serve --bg 127.0.0.1:8001`.
+- **Check what's running** — `.\scripts\serve.ps1 -Action status` (or
+  `servy-cli status --name="MakerOS"` on the service) plus
+  `tailscale serve status` for the public mapping.
 - **After a Tailscale rename** the URL changes — update
   `MAKEROS_BASE_URL` and the Google redirect URI to match.
